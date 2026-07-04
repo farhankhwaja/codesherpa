@@ -1,4 +1,4 @@
-# repograph
+# sherpa
 
 A git-native, self-updating structural memory for your codebase. Index once,
 stay fresh forever, spend far fewer tokens on context.

@@ -15,10 +15,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from repograph.embed.engine import EmbeddingEngine
-from repograph.retrieve.config import RetrievalConfig
-from repograph.retrieve.rerank import CrossEncoderReranker
-from repograph.retrieve.retriever import HybridRetriever
+from codesherpa.embed.engine import EmbeddingEngine
+from codesherpa.retrieve.config import RetrievalConfig
+from codesherpa.retrieve.rerank import CrossEncoderReranker
+from codesherpa.retrieve.retriever import HybridRetriever
 from tests.support.evallib import EvalReport, evaluate, load_gold_queries
 from tests.support.realstore import build_real_index
 

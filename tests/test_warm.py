@@ -1,4 +1,4 @@
-"""Phase 5: the index-wide embedding pass (repograph.retrieve.warm).
+"""Phase 5: the index-wide embedding pass (codesherpa.retrieve.warm).
 
 init/sync own embedding computation; the MCP server only reports warming.
 These tests cover the pass itself: incremental behavior, progress callbacks,
@@ -12,14 +12,14 @@ import hashlib
 
 import pytest
 
-from repograph.embed.engine import EmbeddingEngine
-from repograph.retrieve.warm import (
+from codesherpa.embed.engine import EmbeddingEngine
+from codesherpa.retrieve.warm import (
     embed_index,
     embedding_tag,
     ensure_embedding_compat,
     missing_embeddings,
 )
-from repograph.store.sqlite_store import SQLiteIndexStore
+from codesherpa.store.sqlite_store import SQLiteIndexStore
 from tests.support.factories import make_chunk
 
 

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from repograph.contracts.types import Chunk, RetrievalSource, SearchResult
-from repograph.retrieve.tokens import result_token_cost
+from codesherpa.contracts.types import Chunk, RetrievalSource, SearchResult
+from codesherpa.retrieve.tokens import result_token_cost
 
 
 def make_chunk(

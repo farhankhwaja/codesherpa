@@ -12,11 +12,11 @@ from __future__ import annotations
 import re
 from typing import Optional
 
-from repograph.contracts.index_contract import IndexStore
-from repograph.contracts.retrieval_contract import Retriever
-from repograph.contracts.types import PackedContext, RetrievalSource, SearchResult
-from repograph.graph.textutil import estimate_tokens
-from repograph.graph.view import SymbolGraph
+from codesherpa.contracts.index_contract import IndexStore
+from codesherpa.contracts.retrieval_contract import Retriever
+from codesherpa.contracts.types import PackedContext, RetrievalSource, SearchResult
+from codesherpa.graph.textutil import estimate_tokens
+from codesherpa.graph.view import SymbolGraph
 
 _IDENTIFIER_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]{2,}")
 

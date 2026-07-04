@@ -10,8 +10,8 @@ import math
 
 import pytest
 
-from repograph.embed.engine import EmbeddingEngine
-from repograph.store.sqlite_store import SQLiteIndexStore
+from codesherpa.embed.engine import EmbeddingEngine
+from codesherpa.store.sqlite_store import SQLiteIndexStore
 from tests.support.factories import make_chunk
 
 

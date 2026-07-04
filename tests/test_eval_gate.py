@@ -1,6 +1,6 @@
 """Phase 3 eval gate (CLAUDE.md §10/§13) on the REAL index (gitlayer -> cAST
 -> SQLite store -> symbol graph) with the real embedding model and
-cross-encoder (downloads on first run, cached under ~/.cache/repograph/).
+cross-encoder (downloads on first run, cached under ~/.cache/sherpa/).
 
 GATE STATUS: ARMED. Grading was briefly deferred (human instruction
 2026-07-04) while the original 25-query gold set saturated every baseline
@@ -65,7 +65,7 @@ def test_official_eval_gate_passes(miniproject, tmp_path_factory):
     work = tmp_path_factory.mktemp("officialgate")
     repo = work / "repo"
     shutil.copytree(miniproject, repo)
-    shutil.rmtree(repo / ".repograph", ignore_errors=True)
+    shutil.rmtree(repo / ".sherpa", ignore_errors=True)
     proc = subprocess.run(
         [sys.executable, str(ROOT / "eval" / "run_eval.py"),
          "--repo", str(repo), "--mode", "all"],
@@ -127,7 +127,7 @@ def test_every_gold_query_returns_results(gate):
 
 def test_embedding_cache_reused_across_runs(gate):
     """Re-embedding the unchanged real index computes zero new embeddings."""
-    from repograph.embed.engine import EmbeddingEngine
+    from codesherpa.embed.engine import EmbeddingEngine
 
     engine = EmbeddingEngine(
         gate.store, gate.engine.model_name, trust_remote_code=True

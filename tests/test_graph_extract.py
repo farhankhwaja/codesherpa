@@ -10,9 +10,9 @@ from pathlib import Path
 
 import pytest
 
-from repograph.contracts.types import Edge, EdgeKind, SymbolKind, SymbolNode
-from repograph.graph.extract import SourceFile, extract_file, extract_project
-from repograph.graph.gitio import last_change_dates, source_files_at_rev
+from codesherpa.contracts.types import Edge, EdgeKind, SymbolKind, SymbolNode
+from codesherpa.graph.extract import SourceFile, extract_file, extract_project
+from codesherpa.graph.gitio import last_change_dates, source_files_at_rev
 
 
 @pytest.fixture(scope="module")
@@ -201,7 +201,7 @@ def test_empty_repo_raises_clean_value_error(tmp_path: Path):
     error, not a raw CalledProcessError."""
     import subprocess as sp
 
-    from repograph.graph.gitio import source_files_at_rev
+    from codesherpa.graph.gitio import source_files_at_rev
 
     sp.run(["git", "init", "--quiet", str(tmp_path)], check=True)
     with pytest.raises(ValueError, match="cannot read tree"):

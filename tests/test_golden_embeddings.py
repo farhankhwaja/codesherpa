@@ -16,9 +16,9 @@ from __future__ import annotations
 
 import hashlib
 
-from repograph.embed.engine import EmbeddingEngine
-from repograph.gitlayer.sync import sync
-from repograph.store.sqlite_store import SQLiteIndexStore
+from codesherpa.embed.engine import EmbeddingEngine
+from codesherpa.gitlayer.sync import sync
+from codesherpa.store.sqlite_store import SQLiteIndexStore
 from tests.test_golden import GOLDEN_PROJECTION, _fresh_clone, golden_state
 
 _DIM = 24

@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from repograph.contracts.types import (
+from codesherpa.contracts.types import (
     Chunk,
     Edge,
     EdgeKind,
@@ -19,9 +19,9 @@ from repograph.contracts.types import (
     SymbolKind,
     SymbolNode,
 )
-from repograph.graph.gitio import last_change_dates
-from repograph.graph.view import SymbolGraph
-from repograph.store.sqlite_store import SQLiteIndexStore
+from codesherpa.graph.gitio import last_change_dates
+from codesherpa.graph.view import SymbolGraph
+from codesherpa.store.sqlite_store import SQLiteIndexStore
 
 
 @pytest.fixture(scope="module")

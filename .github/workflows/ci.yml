@@ -24,7 +24,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: |
-            ~/.cache/repograph
+            ~/.cache/sherpa
             ~/.cache/huggingface
           key: models-${{ runner.os }}-${{ hashFiles('pyproject.toml') }}
           restore-keys: models-${{ runner.os }}-
@@ -37,7 +37,7 @@ jobs:
           pip install -e ".[dev]"
 
       # the venv must be ACTIVE (its bin on PATH): the suite asserts the
-      # `repograph` console script is installed and runnable
+      # `sherpa` console script is installed and runnable
       - name: Run the full test suite
         run: |
           . .venv/bin/activate

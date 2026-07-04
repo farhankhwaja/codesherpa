@@ -8,16 +8,16 @@ from pathlib import Path
 
 import pytest
 
-from repograph.contracts.types import EdgeKind, SymbolKind
-from repograph.gitlayer.sync import sync
-from repograph.store.sqlite_store import SQLiteIndexStore
+from codesherpa.contracts.types import EdgeKind, SymbolKind
+from codesherpa.gitlayer.sync import sync
+from codesherpa.store.sqlite_store import SQLiteIndexStore
 
 
 @pytest.fixture()
 def synced(miniproject: Path, tmp_path: Path):
     repo = tmp_path / "repo"
     shutil.copytree(miniproject, repo)
-    shutil.rmtree(repo / ".repograph", ignore_errors=True)
+    shutil.rmtree(repo / ".sherpa", ignore_errors=True)
     db = tmp_path / "index.db"
     stats = sync(repo, db)
     store = SQLiteIndexStore(db)

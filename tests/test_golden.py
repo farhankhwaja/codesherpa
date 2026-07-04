@@ -3,7 +3,7 @@
 Incremental index == full rebuild. From the miniproject fixture, perform a
 random (hypothesis-driven) sequence of >=10 git operations — commit new file,
 modify, delete, branch, switch, merge (both a tree-changing merge and the
-degenerate `-s ours` flavor), revert — running ``repograph sync`` after each.
+degenerate `-s ours` flavor), revert — running ``sherpa sync`` after each.
 The final incremental DB state (active blobs, files mapping, chunks of active
 blobs, FTS rows of active blobs) must be IDENTICAL to a from-scratch rebuild
 at the same HEAD.
@@ -30,8 +30,8 @@ from hypothesis import strategies as st
 
 # The Phase-1 public API the golden test pins down. Importing at module level
 # is deliberate: the test is red until the indexer exists.
-from repograph.gitlayer.sync import sync
-from repograph.store.sqlite_store import SQLiteIndexStore
+from codesherpa.gitlayer.sync import sync
+from codesherpa.store.sqlite_store import SQLiteIndexStore
 
 _GIT_ENV = {
     "GIT_AUTHOR_NAME": "Golden Bot",
@@ -250,7 +250,7 @@ def _project_symbols(store: SQLiteIndexStore) -> tuple[tuple, ...]:
     """Phase 4 extractor (ownership exception per the note below / D14).
 
     Graph tables are recomputed from the active mapping and replaced on every
-    sync (repograph/graph/index.py, DECISIONS D19), so the WHOLE table —
+    sync (sherpa/graph/index.py, DECISIONS D19), so the WHOLE table —
     including file_path — must match between incremental and rebuild; no
     active-blob filtering is needed or wanted here.
     """
@@ -335,7 +335,7 @@ def golden_state(db_path: Path) -> dict:
 
 def _fresh_clone(miniproject: Path, dest: Path) -> RepoDriver:
     shutil.copytree(miniproject, dest)
-    shutil.rmtree(dest / ".repograph", ignore_errors=True)
+    shutil.rmtree(dest / ".sherpa", ignore_errors=True)
     return RepoDriver(dest)
 
 

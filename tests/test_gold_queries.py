@@ -62,8 +62,8 @@ def test_expected_symbols_appear_in_expected_files(miniproject: Path) -> None:
 def test_expected_symbols_are_definitions(miniproject: Path) -> None:
     """Each expected symbol must be a real definition (not a mere mention)
     in at least one expected file."""
-    from repograph.graph.extract import SourceFile, extract_file
-    from repograph.graph.languages import language_for_path
+    from codesherpa.graph.extract import SourceFile, extract_file
+    from codesherpa.graph.languages import language_for_path
 
     for entry in _entries():
         defined: set[str] = set()

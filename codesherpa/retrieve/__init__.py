@@ -1,0 +1,33 @@
+"""codesherpa.retrieve — hybrid retrieval pipeline (Phase 3, CLAUDE.md §7.5).
+
+Public surface for the MCP server (Phase 4), the CLI, and the eval harness:
+
+    from codesherpa.retrieve import HybridRetriever, RetrievalConfig
+    # eval/run_eval.py default factory (DECISIONS D17):
+    from codesherpa.retrieve import build_eval_retriever
+"""
+
+from codesherpa.retrieve.config import RetrievalConfig
+from codesherpa.retrieve.evalfactory import (
+    IndexNotBuiltError,
+    build_eval_retriever,
+    build_retriever,
+)
+from codesherpa.retrieve.fusion import rrf_fuse
+from codesherpa.retrieve.pack import pack_results
+from codesherpa.retrieve.rerank import CrossEncoderReranker
+from codesherpa.retrieve.retriever import HybridRetriever
+from codesherpa.retrieve.warm import embed_index, missing_embeddings
+
+__all__ = [
+    "CrossEncoderReranker",
+    "HybridRetriever",
+    "IndexNotBuiltError",
+    "RetrievalConfig",
+    "build_eval_retriever",
+    "build_retriever",
+    "embed_index",
+    "missing_embeddings",
+    "pack_results",
+    "rrf_fuse",
+]

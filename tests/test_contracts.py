@@ -8,9 +8,9 @@ import typing
 
 import pytest
 
-from repograph.contracts.index_contract import IndexStore
-from repograph.contracts.retrieval_contract import Retriever
-from repograph.contracts.types import (
+from codesherpa.contracts.index_contract import IndexStore
+from codesherpa.contracts.retrieval_contract import Retriever
+from codesherpa.contracts.types import (
     Chunk,
     Edge,
     EdgeKind,

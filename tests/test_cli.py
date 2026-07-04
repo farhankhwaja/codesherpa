@@ -1,4 +1,4 @@
-"""Phase 0: the package installs and `repograph --help` runs."""
+"""Phase 0: the package installs and `sherpa --help` runs."""
 
 from __future__ import annotations
 
@@ -11,23 +11,23 @@ import pytest
 
 def test_module_help_runs() -> None:
     result = subprocess.run(
-        [sys.executable, "-m", "repograph.cli", "--help"],
+        [sys.executable, "-m", "codesherpa.cli", "--help"],
         capture_output=True,
         text=True,
     )
     assert result.returncode == 0
-    assert "repograph" in result.stdout
+    assert "sherpa" in result.stdout
     for command in ("init", "sync", "search", "status", "serve", "bench"):
         assert command in result.stdout
 
 
 def test_console_script_help_runs() -> None:
-    exe = shutil.which("repograph")
+    exe = shutil.which("sherpa")
     if exe is None:
-        pytest.fail("console script `repograph` not on PATH — was the package pip-installed?")
+        pytest.fail("console script `sherpa` not on PATH — was the package pip-installed?")
     result = subprocess.run([exe, "--help"], capture_output=True, text=True)
     assert result.returncode == 0
-    assert "repograph" in result.stdout
+    assert "sherpa" in result.stdout
 
 
 def test_unimplemented_subcommand_exits_nonzero() -> None:
@@ -35,7 +35,7 @@ def test_unimplemented_subcommand_exits_nonzero() -> None:
     # `status`, Phases 1–4 probed `search`; Phase 5 implemented search — see
     # DECISIONS.md D5 precedent: the probe moves, the assertions never weaken).
     result = subprocess.run(
-        [sys.executable, "-m", "repograph.cli", "bench"],
+        [sys.executable, "-m", "codesherpa.cli", "bench"],
         capture_output=True,
         text=True,
     )
@@ -54,20 +54,20 @@ def test_serve_refuses_non_repository(tmp_path) -> None:
     This also keeps the suite free of a real server launch: the failure
     happens before any model load or repo mutation."""
     result = subprocess.run(
-        [sys.executable, "-m", "repograph.cli", "serve", str(tmp_path)],
+        [sys.executable, "-m", "codesherpa.cli", "serve", str(tmp_path)],
         capture_output=True,
         text=True,
         timeout=120,
     )
     assert result.returncode != 0
-    assert not (tmp_path / ".repograph" / "index.db").exists()
+    assert not (tmp_path / ".sherpa" / "index.db").exists()
 
 
 def test_init_runs_embedding_pass_and_no_embed_skips_it(miniproject, tmp_path, monkeypatch) -> None:
-    """Phase 5 §3f: `repograph init` owns the embedding pass (with progress);
+    """Phase 5 §3f: `sherpa init` owns the embedding pass (with progress);
     `--no-embed` skips it. The pass itself is stubbed — model behavior is
     covered by tests/test_warm.py."""
-    import repograph.cli as cli
+    import codesherpa.cli as cli
 
     calls: list[dict] = []
     monkeypatch.setattr(
@@ -78,7 +78,7 @@ def test_init_runs_embedding_pass_and_no_embed_skips_it(miniproject, tmp_path, m
 
     repo = tmp_path / "repo"
     shutil.copytree(miniproject, repo)
-    shutil.rmtree(repo / ".repograph", ignore_errors=True)
+    shutil.rmtree(repo / ".sherpa", ignore_errors=True)
 
     assert cli.main(["init", str(repo)]) == 0
     assert len(calls) == 1
@@ -92,7 +92,7 @@ def test_init_runs_embedding_pass_and_no_embed_skips_it(miniproject, tmp_path, m
 def test_sync_embeds_hook_safely_when_quiet(miniproject, tmp_path, monkeypatch) -> None:
     """Quiet syncs come from git hooks: they embed incrementally but must
     never download a model (require_cached_model)."""
-    import repograph.cli as cli
+    import codesherpa.cli as cli
 
     calls: list[dict] = []
     monkeypatch.setattr(
@@ -103,7 +103,7 @@ def test_sync_embeds_hook_safely_when_quiet(miniproject, tmp_path, monkeypatch) 
 
     repo = tmp_path / "repo"
     shutil.copytree(miniproject, repo)
-    shutil.rmtree(repo / ".repograph", ignore_errors=True)
+    shutil.rmtree(repo / ".sherpa", ignore_errors=True)
     monkeypatch.chdir(repo)
 
     assert cli.main(["sync", "--quiet"]) == 0
@@ -115,10 +115,10 @@ def test_sync_embeds_hook_safely_when_quiet(miniproject, tmp_path, monkeypatch) 
 
 
 def test_version_flag() -> None:
-    from repograph import __version__
+    from codesherpa import __version__
 
     result = subprocess.run(
-        [sys.executable, "-m", "repograph.cli", "--version"],
+        [sys.executable, "-m", "codesherpa.cli", "--version"],
         capture_output=True,
         text=True,
     )
