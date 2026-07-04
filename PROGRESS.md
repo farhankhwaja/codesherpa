@@ -1,12 +1,12 @@
 # Progress
 
 ## Current phase & worktree
-Phase 4 (Symbol Graph + MCP) — implementation COMPLETE in worktree
-`graph-mcp`, integrated with the real store on a rebased main (Phases 0–2 +
-gold-set hardening). Verifier run + §3.3 merge are the remaining steps of
-this session; one criterion is awaiting-human (manual smoke, below).
-Phase 3 (retrieval) proceeds in parallel; per §8 order graph-mcp merges
-before retrieval.
+Phase 4 (Symbol Graph + MCP) — COMPLETE except one awaiting-human checkbox
+(manual smoke, below). Full-scope Verifier PASS
+(`verification/phase-4-report.md`); merged to main per §3.3 (graph-mcp
+merges before retrieval, per §8). Phase 3 (retrieval) is the only worktree
+still open; it re-runs the expansion delta inside the production pipeline at
+its eval gate and must extend GOLDEN_PROJECTION with embeddings.
 
 ## Done (one line each, with commit hash)
 - Phases 0–2 + golden hardening on main — dc77f33..c35392a
@@ -19,8 +19,9 @@ before retrieval.
 - Suite: 179 tests green incl. golden
 
 ## In progress
-Phase 4 close-out: verifier → §3.3 checklist → merge `worktree-graph-mcp`
-into main (before retrieval merges, per §8/§3.3 order).
+Nothing in graph-mcp. Next: Phase 3 finishes in `retrieval`; then Phase 5
+(hardening + benchmarks) on main, which also needs the human smoke transcript
+below and a GOLDEN_DEEP=1 soak record (one PASS already logged in EVAL_LOG).
 
 ## Blocked / open questions
 None blocking. **Awaiting human (Phase 4 manual-smoke checkbox — do NOT mark
