@@ -103,18 +103,20 @@ decoy queries) over a mixed Py+TS fixture; file-level hits:
 | a private React+Node app (29 kLOC) | 12 | 0.833 | 0.674 | 207 ms |
 
 **Indexing** — parse+chunk+store ~150 kLOC/s; cold `init` incl. embeddings:
-flask 231 s (616 chunks, 13 MB index), the React+Node app 74 s (216 chunks,
-5.9 MB). Warm re-sync with no new blobs: ~20–40 ms. Golden replay over
-flask's last 30 commits: incremental ≡ rebuild across all 7 projections.
+flask 231.5 s (616 chunks, 13 MB index), the React+Node app 73.7 s
+(216 chunks, 5.9 MB). Warm re-sync with no new blobs: 18–44 ms (synthetic
+bench corpus, EVAL_LOG Phase 1/2). Golden replay over flask's last 30
+commits: incremental ≡ rebuild across all 7 projections.
 
 **Agent A/B** (21 frozen tasks — debugging + feature-location — fresh
 headless Claude Code session per task, with vs without sherpa; solution keys
 frozen in advance; two rounds, the second after `search_code` went
 compact-first): solve rate **with sherpa ≥ without in both rounds** (v1:
 21/21 vs 19/21; v2: 20/21 vs 19/21 — the failures that flip between rounds
-are run-to-run variance, reported as such). With sherpa: **48–61 % fewer
-whole-file reads**, 37–48 % fewer tool calls, and on the real app **52.7 %
-lower billed cost** (v2). Honest miss: raw *token* usage per solved task
+are run-to-run variance, reported as such). With sherpa: **39–69 % fewer
+whole-file reads across both rounds (55–61 % in v2)**, 12–48 % fewer tool
+calls (37–48 % in v2), and on the real app **52.7 % lower billed cost**
+(v2). Honest miss: raw *token* usage per solved task
 still did not drop ≥50 % (v2: −16 % on the small fixture, +1 % on the real
 app; v1 was −70 %/+2 % before compact-first) — headless agents re-read the
 growing context every turn, so cache reads dominate raw counts. Full
@@ -169,7 +171,8 @@ choice), `EVAL_LOG.md` (append-only benchmark record). See CONTRIBUTING.md.
 - Language connectors beyond Py/TS/JS/TSX (a language = one tree-sitter
   query file)
 - bge-class rerankers on GPU/quantized runtimes (`TODO(upgrade)` markers)
-- Compact-first `search_code` responses (the A/B token lever), `sherpa bench`
+- `sherpa bench` CLI wrapper; per-blob graph extraction cache
+  (`TODO(upgrade)` in graph/index.py)
 - Multi-ref tracking (index all local branches, not just HEAD)
 - Optional `watchdog` fs-watcher for uncommitted edits
 
