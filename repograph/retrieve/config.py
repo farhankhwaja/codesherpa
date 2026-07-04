@@ -5,10 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from repograph.embed.engine import default_cache_dir
 
-def default_cache_dir() -> Path:
-    """Model cache location (CLAUDE.md §6: cache under ~/.cache/repograph/)."""
-    return Path.home() / ".cache" / "repograph" / "models"
+__all__ = ["RetrievalConfig", "default_cache_dir"]
 
 
 @dataclass

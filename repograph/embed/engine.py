@@ -18,7 +18,15 @@ from typing import Optional
 
 from repograph.contracts.index_contract import IndexStore
 from repograph.contracts.types import Chunk
-from repograph.retrieve.config import default_cache_dir
+
+
+def default_cache_dir() -> Path:
+    """Model cache location (CLAUDE.md §6: cache under ~/.cache/repograph/).
+
+    Lives here (not in retrieve.config) so embed/ never imports retrieve/ —
+    retrieve depends on embed, and the reverse edge would be circular.
+    """
+    return Path.home() / ".cache" / "repograph" / "models"
 
 # Per-model input decoration. nomic-embed-text-v1.5 requires task prefixes;
 # jina-embeddings-v2-base-code and MiniLM take raw text.
