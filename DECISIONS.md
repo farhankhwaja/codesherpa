@@ -92,3 +92,15 @@ sibling chunks" and byte-exactness is preserved either way.
 The bundled tree-sitter-python grammar yields a def/class docstring as a bare
 `string` first child of `block` (not wrapped in `expression_statement` as in
 some grammar versions). Breadcrumb extraction handles both shapes.
+
+## D13 — cAST recursion guard: depth cap 50 + fallback safety net (Phase 2, verifier finding)
+Phase 2 verifier FAIL finding 2: chained-operator expressions (generated JS,
+`1+1+...`) nest one AST level per operator, so `_split` could exceed Python's
+stack on syntactically valid files that pass every skip rule. Fix: (a) beyond
+50 split levels the chunker degrades to the iterative line-boundary hard
+split — real code structure is exhausted far shallower, so chunk quality is
+unaffected; (b) the whole split/merge/breadcrumb pipeline is wrapped so ANY
+unexpected error logs a warning and falls back to line windows (§7.2 "never
+crash the indexer"). Regression tests: deeply nested JS + Python inputs.
+Finding 1 (tree-sitter deps missing from pyproject.toml) fixed in the same
+commit; finding 3 (no direct JS test) addressed with a JS class/breadcrumb test.

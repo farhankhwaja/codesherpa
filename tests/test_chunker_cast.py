@@ -105,6 +105,44 @@ def test_giant_single_line_hard_split() -> None:
     _reassemble(chunks, src)
 
 
+def test_deeply_nested_ast_does_not_crash() -> None:
+    """Verifier Phase 2 finding 2: chained binary operators build an AST one
+    level deep per operator; an oversized node of that shape must not blow the
+    interpreter stack (generated/concatenated JS is exactly this)."""
+    src = b"var x=" + b"1+" * 20_000 + b"1;"
+    chunks = chunk_blob(BLOB, src, "app.js")  # full dispatch path, no exception
+    assert chunks
+    for c in chunks:
+        assert _nonws(src, c.byte_start, c.byte_end) <= MAX_CHUNK_NONWS
+    _reassemble(chunks, src)
+    # determinism holds on the depth-capped path too
+    assert chunks == chunk_blob(BLOB, src, "app.js")
+
+
+def test_deeply_nested_oversized_python_does_not_crash() -> None:
+    src = b"x = " + b"(" * 4_000 + b"1" + b")" * 4_000 + b"\n" + b"y = 2\n" * 800
+    chunks = chunk_blob(BLOB, src, "gen.py")
+    assert chunks
+    _reassemble(chunks, src)
+
+
+def test_javascript_class_chunks_and_breadcrumbs() -> None:
+    methods = "\n".join(
+        f"  method{i}(x) {{\n"
+        + "\n".join(f"    x += {j}; // step" for j in range(60))
+        + "\n    return x;\n  }\n"
+        for i in range(8)
+    )
+    src = f"class Gadget {{\n{methods}}}\n\nfunction helper(a) {{ return a; }}\n".encode()
+    chunks = chunk_ast(BLOB, src, "scripts/gadget.js", "javascript")
+    assert chunks is not None
+    assert len(chunks) > 1
+    _reassemble(chunks, src)
+    method_chunks = [c for c in chunks if c.code.lstrip().startswith("method")]
+    assert method_chunks
+    assert method_chunks[0].breadcrumb.startswith("// scripts/gadget.js :: Gadget :: method")
+
+
 # -------------------------------------------------------------- breadcrumbs
 
 

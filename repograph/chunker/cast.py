@@ -41,6 +41,12 @@ logger = logging.getLogger(__name__)
 
 MAX_CHUNK_NONWS = 1600  # non-whitespace chars per chunk (§7.2 default)
 
+# Recursion guard: chained-operator expressions (generated/concatenated JS)
+# nest one AST level per operator, so an oversized node can be thousands of
+# levels deep. Real code structure is exhausted long before this depth; past
+# it we degrade to the iterative line-boundary hard split.
+MAX_SPLIT_DEPTH = 50
+
 _WHITESPACE = b" \t\r\n\x0b\x0c"
 
 _QUOTE_PREFIX_RE = re.compile(r"^[rbuRBU]{0,3}(\"\"\"|'''|\"|')")
@@ -90,13 +96,14 @@ def _split(
     data: bytes,
     spec: LanguageSpec,
     max_chunk: int,
+    depth: int = 0,
 ) -> list[_Piece]:
     size = _nonws(data, start, end)
     if size <= max_chunk:
         return [_Piece(start, end, size, scope, node)]
 
     children = node.children
-    if not children:
+    if not children or depth >= MAX_SPLIT_DEPTH:
         return _hard_split(node, start, end, scope, data, max_chunk)
 
     child_scope = scope
@@ -112,7 +119,9 @@ def _split(
         ext_end = children[i + 1].start_byte if i + 1 < len(children) else end
         if ext_start >= ext_end:
             continue  # zero-width token extent swallowed by a neighbor
-        pieces.extend(_split(child, ext_start, ext_end, child_scope, data, spec, max_chunk))
+        pieces.extend(
+            _split(child, ext_start, ext_end, child_scope, data, spec, max_chunk, depth + 1)
+        )
     return pieces
 
 
@@ -241,19 +250,28 @@ def chunk_ast(
         )
         return None
 
-    pieces = _merge(_split(root, 0, len(data), (), data, spec, max_chunk), max_chunk)
-    chunks: list[Chunk] = []
-    for piece in pieces:
-        code = data[piece.start : piece.end].decode("utf-8", errors="replace")
-        chunks.append(
-            Chunk(
-                blob_hash=blob_hash,
-                byte_start=piece.start,
-                byte_end=piece.end,
-                file_path=file_path,
-                language=language,
-                code=code,
-                breadcrumb=_breadcrumb(piece, code, file_path, language, spec),
+    try:
+        pieces = _merge(_split(root, 0, len(data), (), data, spec, max_chunk), max_chunk)
+        chunks: list[Chunk] = []
+        for piece in pieces:
+            code = data[piece.start : piece.end].decode("utf-8", errors="replace")
+            chunks.append(
+                Chunk(
+                    blob_hash=blob_hash,
+                    byte_start=piece.start,
+                    byte_end=piece.end,
+                    file_path=file_path,
+                    language=language,
+                    code=code,
+                    breadcrumb=_breadcrumb(piece, code, file_path, language, spec),
+                )
             )
+        return chunks
+    except Exception as exc:  # §7.2: never crash the indexer on a weird file
+        logger.warning(
+            "cAST chunking failed for %s (%s): %r; falling back to line windows",
+            file_path,
+            language,
+            exc,
         )
-    return chunks
+        return None
