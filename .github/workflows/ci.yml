@@ -34,7 +34,18 @@ jobs:
           python -m venv .venv
           . .venv/bin/activate
           python -m pip install --upgrade pip
+          # CPU-only torch FIRST: the default Linux wheel drags the full CUDA
+          # stack (~532 MB torch + ~2.5 GB of nvidia-* wheels) onto a GPU-less
+          # runner — wasted minutes and most of the ~14 GB disk the HF model
+          # cache also needs
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install -e ".[dev]"
+
+      - name: Disk headroom for the model cache
+        run: |
+          df -h / | tail -1
+          # fail loudly if the model cache (~750 MB) can't fit
+          test "$(df --output=avail -m / | tail -1)" -gt 4096
 
       # the venv must be ACTIVE (its bin on PATH): the suite asserts the
       # `sherpa` console script is installed and runnable
