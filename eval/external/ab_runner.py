@@ -90,13 +90,21 @@ def run_task(
         ]
 
     started = time.perf_counter()
-    proc = subprocess.run(
-        cmd, cwd=repo, capture_output=True, text=True, timeout=1200
-    )
+    try:
+        proc = subprocess.run(
+            cmd, cwd=repo, capture_output=True, text=True, timeout=1200
+        )
+        stdout, stderr, returncode = proc.stdout, proc.stderr, proc.returncode
+    except subprocess.TimeoutExpired as exc:
+        # a hung/slow session is DATA (recorded as unsolved), never a crash
+        stdout = (exc.stdout or b"").decode() if isinstance(exc.stdout, bytes) else (exc.stdout or "")
+        stderr = "TIMEOUT after 1200s"
+        returncode = -1
     wall = time.perf_counter() - started
 
     stream_path = out_dir / f"{task_id}-{arm}.stream.jsonl"
-    stream_path.write_text(proc.stdout, encoding="utf-8")
+    stream_path.write_text(stdout, encoding="utf-8")
+    proc_stdout, proc_stderr = stdout, stderr
 
     tool_calls = 0
     file_reads = 0
@@ -105,7 +113,7 @@ def run_task(
     saw_mcp = False
     usage: dict = {}
     result_text = ""
-    for line in proc.stdout.splitlines():
+    for line in proc_stdout.splitlines():
         try:
             event = json.loads(line)
         except json.JSONDecodeError:
@@ -139,7 +147,7 @@ def run_task(
     row = {
         "task": task_id,
         "arm": arm,
-        "exit": proc.returncode,
+        "exit": returncode,
         "wall_s": round(wall, 1),
         "tokens_total": tokens_total,
         "input_tokens": usage.get("input_tokens", 0),
@@ -154,8 +162,8 @@ def run_task(
         "fallback_after_mcp": fallback_after_mcp,
         "answer": result_text,
     }
-    if proc.returncode != 0:
-        row["stderr_tail"] = proc.stderr[-500:]
+    if returncode != 0:
+        row["stderr_tail"] = proc_stderr[-500:]
     return row
 
 
