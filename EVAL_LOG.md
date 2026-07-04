@@ -245,3 +245,11 @@ per task per arm, ground truth never shown to agents.
   every headless turn re-reads the growing context (cache reads dominate
   tokens_total); B takes fewer turns but each is fatter. Billing-weighted
   cost lands within ±25 % of arm A.
+
+## 2026-07-04 — Phase 5 — pre-merge obligations
+
+- GOLDEN_DEEP=1 soak (randomized, max_examples 25): **PASS** on branch
+  phase-5 (post-D30 code), this workstation.
+- CI workflow added (.github/workflows/ci.yml): venv is ACTIVE for the
+  suite (console-script requirement), model caches cached, golden test run
+  explicitly.

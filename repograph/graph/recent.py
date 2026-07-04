@@ -103,8 +103,9 @@ def recent_changes(
     """Commits (newest first) since a git ref or ISO date, with symbol diffs.
 
     ``since`` is either a ref (``HEAD~5``, a branch, a SHA — commits in
-    ``since..HEAD``) or an ISO date (``2024-01-06`` — commits authored on or
-    after it). Raises ValueError for a ref git does not know.
+    ``since..HEAD``) or an ISO date (``2024-01-06`` — commits from UTC
+    midnight of that date; a full ISO datetime is passed through verbatim).
+    Raises ValueError for a ref git does not know.
     """
     log_args = [
         "log",
@@ -113,7 +114,13 @@ def recent_changes(
         "--no-renames",
     ]
     if _ISO_DATE_RE.match(since):
-        log_args += [f"--since={since}", "HEAD"]
+        # a BARE date is pinned to UTC midnight: git's approxidate would
+        # otherwise read "2024-01-07" as that date at the CURRENT time of
+        # day, silently dropping same-day commits depending on when (and in
+        # which timezone) the query runs — found as a time-of-day-dependent
+        # test failure in Phase 5
+        value = f"{since}T00:00:00Z" if re.fullmatch(r"\d{4}-\d{2}-\d{2}", since) else since
+        log_args += [f"--since={value}", "HEAD"]
     else:
         log_args += [f"{since}..HEAD"]
     try:

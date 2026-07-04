@@ -467,3 +467,14 @@ cherry-picking" — read as pre-authorizing honest-miss-and-continue rather
 than halting the mandated Phase 5+6 execution. The README's benchmark
 section reports the miss in plain language and claims only what held up:
 higher solve rate, fewer tool calls/file reads, cost parity.
+
+## D36 — recent_changes: bare ISO dates pinned to UTC midnight (Phase 5)
+The pre-merge full-suite run failed `test_since_iso_date` at 19:53 IST after
+passing all day: git's approxidate reads a bare `--since=2024-01-07` as that
+date at the CURRENT wall-clock time, so `get_recent_changes("2024-01-07")`
+silently excluded same-day commits depending on when/where it ran — a
+correctness bug in the code (its contract says "commits on or after the
+date"), not in the test (§2.1: code fixed, test untouched). Bare dates are
+now normalized to `<date>T00:00:00Z`; full ISO datetimes pass through
+verbatim. UTC (not local) midnight so the same query returns the same
+commits on every machine.

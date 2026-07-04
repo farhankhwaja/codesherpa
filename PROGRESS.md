@@ -1,72 +1,59 @@
 # Progress
 
 ## Current phase & worktree
-Phase 3 (Embeddings + Retrieval) — COMPLETE on `worktree-retrieval`, fully
-integrated with the real store/chunker/graph (Phases 1–2 and 4 are on main).
-Official eval gate PASSES (`eval/run_eval.py --mode all`: hybrid 0.971/0.877,
-strictly beats bm25 0.771 and vector 0.829; exit 0). Verifier **PASS**
-(`verification/phase-3-report.md`; one FAIL round fixed per D29 — deps
-declaration + expired serve probe). Merged to main per §3.3 (retrieval
-merged last; order satisfied). Next: Phase 5 (hardening + benchmarks) on
-main, single session.
+Phase 5 (Hardening + Full Benchmarks) — COMPLETE on branch `phase-5`,
+awaiting Verifier + §3.3 merge. Then: project rename repograph→sherpa
+(human instruction, see below), then Phase 6 (ship) on main.
 
 ## Done (one line each, with commit hash)
-- Phases 0–2 + golden hardening + Phase 4 (graph, MCP, eval harness,
-  hardened 35-query gold set) — all on main, dc77f33..717e927
-- Phase 3 pipeline (RRF, router, packer, embed cache, reranker,
-  HybridRetriever + structural lookups) — first 5 commits of this branch
-- Real-store integration; memstore + test symbol populator retired (real
-  sync now provides symbols/edges) — this branch
-- Golden projection extended with embeddings (D14 exception) + non-vacuous
-  golden-embeddings test (embed-per-sync incremental == rebuild) — this branch
-- Rerank robustness vs hardened set: channel-union CE pool, query-focused
-  passages, CE+vector weighted rank blend w=4 (D27); official + internal
-  gates green; p95 178 ms — this branch
-- Embedder benchmark on real chunks: nomic wins among runnable §6 candidates
-  (jina still transformers≥5-incompatible; MiniLM parity noted) — D28
-- `build_eval_retriever` (D17 factory) + production `build_retriever` for
-  `python -m repograph.mcp_server` — this branch
-- Expansion delta in the production pipeline: 0.000, non-decreasing ✓ —
-  EVAL_LOG
+- Phases 0–4 + Phase 3 retrieval — merged on main through 35cf67a; Phase 4
+  human smoke transcripts 24eb65a; A/B task lists committed (ebf9660 sizly,
+  fixture list this branch)
+- D30: server startup never syncs/embeds/downloads; init/sync own the
+  embedding pass (retrieve/warm.py) with progress + --no-embed; warming
+  status from MCP tools; local_files_only warm starts; `repograph search`
+  CLI — 00a0dce
+- D31 router regex stays ASCII (documented); D32 q28 text-weighting attempt
+  REJECTED with numbers — ac6e588
+- External validation: flask (616 chunks, 231.5 s cold init, 13 MB index)
+  + sizly (216 chunks, 73.7 s, 5.9 MB); 5 sensible queries each;
+  transcripts verification/phase5/ (sizly redacted to paths) — f7b4edf
+- D33 embedder rematch on real repos: nomic stays default (hybrid wins both
+  repos; honest note: its isolated dense channel is weak on real repos);
+  D34 expansion delta flask/sizly: recall Δ 0.000 both, kept ON; golden
+  replay on flask 30 commits PASS; CI workflow (venv ACTIVE) — b2f0d3a
+- A/B benchmark executed + recorded (D35): §13 ≥50 % token target MISSED
+  (fixture −69.8 %, sizly +2.2 %); solve rate B 21/21 > A 19/21; fewer tool
+  calls/file reads; BLOCKED.md B3 filed — b507945
+- GOLDEN_DEEP=1 soak re-run: PASS (this workstation, this branch)
 
 ## In progress
-Nothing in retrieval. All six §3.3 boxes checked at merge time (clean-
-checkout suite 273/273 by the verifier, golden green, eval thresholds met +
-logged, verifier PASS committed, contracts untouched, docs updated).
+Phase 5 close-out: full suite from clean state → Verifier → §3.3 merge.
 
 ## Blocked / open questions
-None for Phase 3 (BLOCKED.md removed: B1 resolved by hardened gold set +
-D27 pipeline work; B2 by Phases 1–2/4 merging).
-
-**Awaiting human (Phase 4 manual-smoke checkbox — do NOT mark done until a
-human runs it):**
-- [ ] Manual smoke: connect Claude Code to this repo's index, run 3 real
-  queries, paste transcripts into `verification/phase4-smoke/`.
-  After Phase 3 merges the canonical wiring is:
-  `repograph init` then
-  `claude mcp add repograph -- "$PWD/.venv/bin/python" -m repograph.mcp_server "$PWD"`
-  Suggested queries: `search_code("how does sync decide which blobs are new")`,
-  `get_callers("sync_graph")`, `get_recent_changes("HEAD~5")`.
+- BLOCKED.md B3: A/B raw-token target missed (recorded honestly, phase
+  proceeded per the human's "record whatever the numbers are" amendment).
+  Human decides: accept reframed value prop vs pursue token-diet levers.
 
 ## Notes for the next session
+- HUMAN INSTRUCTION (pending, do before Phase 6): rename repograph→sherpa.
+  PyPI name `codesherpa`, package/imports/CLI/MCP-server `sherpa`, index dir
+  `.sherpa/`; docs/tests/PROGRESS/DECISIONS updated; suite green from clean
+  checkout; record in DECISIONS (incl. contracts/ import-line touch under
+  explicit human instruction).
 - venv: `uv venv --python 3.12 .venv && uv pip install -e ".[dev]" --python
   .venv/bin/python`; tests: `PATH="$PWD/.venv/bin:$PATH" .venv/bin/python -m
-  pytest -q` (273 tests, ~8 min incl. two real-model eval gates; models
-  cached at ~/.cache/repograph/, first run downloads ~750 MB).
-- Official gate: `python eval/run_eval.py --repo <repo> --mode all` resolves
-  `repograph.retrieve:build_eval_retriever` (D17). Production wiring:
-  `repograph.retrieve.build_retriever(repo)` -> (HybridRetriever, store).
-- Non-obvious retrieval defaults (repograph/retrieve/config.py): rerank
-  depth 20 + 700-char query-focused passages (latency gate, D26/D27),
-  CE+vector blend weight 4 (D27), nomic needs trust_remote_code + einops
-  (D25/D28 — einops is a runtime dep).
-- Known limitation: q28 (nl_hard, MemoCache) missed by every channel —
-  Phase 5 candidate (e.g. docstring-weighted embedding text).
-- MiniLM reached fixture parity with nomic (D28) — re-benchmark embedders on
-  real external repos in Phase 5; `embed_model` is config.
-- jina benchmarking needs a throwaway venv (`transformers<5`, D25); never
-  pin transformers in the product.
-- Router token regex is ASCII-only (verifier informational) — non-ASCII
-  identifiers fall to the dense path gracefully; widen `_TOKEN_RE` if needed.
-- GOLDEN_DEEP=1 soak: one PASS logged (Phase 4); re-record before Phase 5
-  merge. GPG signing requires unsandboxed git commits.
+  pytest -q` (~300 tests incl. two real-model eval gates; models cached at
+  ~/.cache/repograph/).
+- Production wiring: `build_retriever(repo)` OPENS the existing index only
+  (IndexNotBuiltError if missing); eval wiring `build_eval_retriever` still
+  syncs+embeds. Embedding pass: `repograph.retrieve.warm.embed_index`
+  (embed-tag invalidation wipes vectors on model/text-version change).
+- External harnesses: eval/golden_replay.py <repo>; eval/external/
+  bench_external.py <repo> <gold.jsonl>; eval/external/ab_runner.py (see
+  verification/ab/ab-results.md for the protocol as executed).
+- Known limitations for the README: q28-class semantic misses (D32), CPU
+  reranker fallback bge TODO(upgrade) (D26), expansion MRR dip on flask
+  (D34), A/B raw-token miss (B3/D35).
+- GPG signing requires unsandboxed git commits. Never commit sizly file
+  contents — paths/scores only.
