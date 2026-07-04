@@ -441,3 +441,29 @@ lower-scored relevant chunk inside the top-5 without evicting it. Kept ON:
 recall is gate-protected, the MRR effect is small and sign-mixed, and
 expansion is the feature that surfaces callers/callees context agents
 actually use (Phase 4 smoke). Config flag remains for A/B.
+
+## D35 — A/B benchmark: execution choices and the target-miss handling (Phase 5)
+Choices made before any run: model `sonnet` in both arms (identical-settings
+rule; sized like real agent deployments); max-turns 40 + 20-min wall cap
+(the cap converts a runaway session into an honest unsolved row — arm A hit
+it once, 107 tool calls without an answer); `tokens_total` counts all input
+variants incl. cache reads plus output (the CLI's cumulative session usage —
+the harness's "input + output"), with fresh-token and billing-cost columns
+reported alongside so no framing hides the raw number. Grading: programmatic
+key-symbol/path match over the final answer, manual review of every row, and
+one pre-declared judgment call applied symmetrically (an "…my earlier answer
+stands" final message counts iff the key was stated earlier in-session;
+happened once per arm). Ground-truth stripping is code, not discipline:
+parse_tasks() removes HTML comments and was asserted against the leak
+keywords before arm A ran.
+Result: the §13 ≥50 % token-reduction target was missed (fixture −69.8 %,
+sizly +2.2 %) while the solve-rate guardrail passed with B strictly better
+(21/21 vs 19/21). Handling per the governing texts: numbers recorded
+verbatim in EVAL_LOG (§10 Phase 5 "record honestly whatever the numbers
+are"), the gap filed as BLOCKED.md B3 (§13), zero post-measurement reruns
+or tuning (ab_harness honesty rules), and the phase proceeded to merge under
+the human's explicit Phase 5 amendment "Record whatever the numbers are — no
+cherry-picking" — read as pre-authorizing honest-miss-and-continue rather
+than halting the mandated Phase 5+6 execution. The README's benchmark
+section reports the miss in plain language and claims only what held up:
+higher solve rate, fewer tool calls/file reads, cost parity.

@@ -220,3 +220,28 @@ out oldest→newest with incremental sync after each; final state vs
 from-scratch rebuild at the same HEAD. **PASS — all 7 projections identical**
 (active blobs, files@HEAD, chunks, FTS, symbols, edges, embeddings).
 Incremental replay 5.8 s total (~0.18 s/commit); rebuild 0.28 s.
+
+## 2026-07-04 — Phase 5 — A/B token benchmark (sizly primary + fixture) — TARGET MISSED, recorded as-is
+
+Full report + methodology + judgment calls: verification/ab/ab-results.md.
+21 tasks (11 sizly from eval/ab_tasks_sizly.md, 10 fixture from
+eval/ab_tasks.md, frozen before arm A), fresh `claude -p` (sonnet) session
+per task per arm, ground truth never shown to agents.
+
+| | solve rate | mean tokens_total (solved) | mean cost | tool calls | file reads |
+|---|---|---|---|---|---|
+| fixture A | 10/10 | 300,849 | $0.506 | 28.9 | 15.1 |
+| fixture B (repograph) | 10/10 | 510,731 (−69.8 %) | $0.383 (+24.4 %) | 14.9 (+48 %) | 4.7 (+69 %) |
+| sizly A | 9/11 | 608,948 | $0.910 | 33.6 | 14.6 |
+| sizly B (repograph) | **11/11** | 595,789 (+2.2 %) | $0.985 (−8.3 %) | 29.5 (+12 %) | 8.8 (+39 %) |
+
+- §13 target ≥50 % token reduction on solved tasks: **NOT MET** (fixture
+  −69.8 %, sizly +2.2 %). Filed in BLOCKED.md per §13; no reruns after
+  seeing results.
+- Solve-rate guardrail B ≥ A: PASS — B solved both tasks A failed (sizly D2
+  timed out in A at 20 min/107 tool calls; A's D5 stalled asking for shell
+  permission). MCP adoption: sizly 11/11 tasks, fixture 7/10.
+- Honest mechanism note: repograph replies are token-dense packed chunks and
+  every headless turn re-reads the growing context (cache reads dominate
+  tokens_total); B takes fewer turns but each is fatter. Billing-weighted
+  cost lands within ±25 % of arm A.
