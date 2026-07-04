@@ -30,6 +30,23 @@ def _compact(payload: object) -> str:
     return json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
 
 
+def _missing_embeddings(store: Optional[IndexStore]) -> Optional[int]:
+    """Active chunks without vectors, or None when it cannot be known cheaply.
+
+    The server never *computes* embeddings (init/sync own that — Phase 5
+    §3e); it only reports how far along the semantic index is so a calling
+    agent understands degraded results while the index is warming.
+    """
+    if store is None:
+        return None
+    try:
+        from repograph.retrieve.warm import missing_embeddings
+
+        return missing_embeddings(store)
+    except Exception:
+        return None
+
+
 def _result_row(result: SearchResult, with_code: bool = False) -> dict:
     chunk = result.chunk
     row: dict = {
@@ -77,6 +94,7 @@ def create_server(
         expand_id for fetching surrounding context later."""
         packed = retriever.search(query, budget_tokens=budget_tokens)
         results = list(packed.results)
+        missing = _missing_embeddings(store)
         # the budget bounds the *response*: the JSON envelope (breadcrumbs,
         # expand_ids, metadata) counts too, so trim trailing results to fit
         while True:
@@ -86,6 +104,14 @@ def create_server(
                 "total_tokens": sum(r.token_count for r in results),
                 "results": [_result_row(r, with_code=True) for r in results],
             }
+            if missing:
+                payload["warming"] = {
+                    "missing_embeddings": missing,
+                    "hint": (
+                        "semantic index incomplete — results may be lexical/"
+                        "symbol-only; run `repograph sync` to finish embedding"
+                    ),
+                }
             text = _compact(payload)
             if estimate_tokens(text) <= budget_tokens or not results:
                 if len(results) < len(packed.results):
@@ -161,6 +187,12 @@ def create_server(
             status["last_sync"] = store.get_meta("last_sync")
             status["last_sync_head"] = (store.get_meta("last_sync_head") or "")[:12] or None
             status["indexed_files"] = len(store.files_for_ref("HEAD"))
+            missing = _missing_embeddings(store)
+            if missing is not None:
+                status["missing_embeddings"] = missing
+                status["warming"] = missing > 0
+                if missing > 0:
+                    status["hint"] = "run `repograph sync` to finish embedding"
         else:
             status["note"] = "no index store attached"
         return _compact(status)

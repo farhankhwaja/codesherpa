@@ -11,6 +11,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Optional
 
+from repograph.embed.engine import model_is_cached
 from repograph.retrieve.config import default_cache_dir
 
 PairScorer = Callable[[list[tuple[str, str]]], list[float]]
@@ -48,6 +49,8 @@ class CrossEncoderReranker:
                 self.model_name,
                 cache_folder=str(self._cache_dir),
                 device="cpu",
+                # warm starts must not touch the network (Phase 5 §3f)
+                local_files_only=model_is_cached(self._cache_dir, self.model_name),
             )
 
             def score(pairs: list[tuple[str, str]]) -> list[float]:

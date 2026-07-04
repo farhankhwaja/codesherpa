@@ -28,6 +28,19 @@ def default_cache_dir() -> Path:
     """
     return Path.home() / ".cache" / "repograph" / "models"
 
+
+def model_is_cached(cache_dir: Path, model_name: str) -> bool:
+    """True when ``model_name`` has a snapshot in the huggingface-style cache.
+
+    Used to pass ``local_files_only=True`` on every load after the first
+    download: a warm start must never touch the network (Phase 5 §3f).
+    """
+    snapshots = cache_dir / f"models--{model_name.replace('/', '--')}" / "snapshots"
+    try:
+        return snapshots.is_dir() and any(snapshots.iterdir())
+    except OSError:
+        return False
+
 # Per-model input decoration. nomic-embed-text-v1.5 requires task prefixes;
 # jina-embeddings-v2-base-code and MiniLM take raw text.
 _MODEL_PREFIXES: dict[str, tuple[str, str]] = {
@@ -72,6 +85,12 @@ class EmbeddingEngine:
 
     # ------------------------------------------------------------------ model
 
+    def has_local_encoder(self) -> bool:
+        """True when embedding can proceed without any network access."""
+        return self._encoder is not None or model_is_cached(
+            self._cache_dir, self.model_name
+        )
+
     def _load_encoder(self) -> Encoder:
         if self._encoder is None:
             from sentence_transformers import SentenceTransformer  # lazy
@@ -81,6 +100,9 @@ class EmbeddingEngine:
                 cache_folder=str(self._cache_dir),
                 trust_remote_code=self._trust_remote_code,
                 device="cpu",
+                # after the first download the load is fully offline — a warm
+                # start must not stall on hub HTTP checks (Phase 5 §3f)
+                local_files_only=model_is_cached(self._cache_dir, self.model_name),
             )
 
             def encode(texts: list[str]) -> list[list[float]]:
