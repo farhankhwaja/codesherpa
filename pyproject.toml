@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]  # >=77 for PEP 639 SPDX license expressions
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,7 +8,8 @@ version = "0.0.1"
 description = "A git-native, self-updating structural memory for your codebase. Index once, stay fresh forever, spend far fewer tokens on context."
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
 authors = [{ name = "codesherpa contributors" }]
 # NOTE: runtime dependencies are added per phase, when first used, strictly
 # from the approved stack in CLAUDE.md §6.

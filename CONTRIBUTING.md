@@ -41,6 +41,29 @@ chunking) plus one query file under `codesherpa/graph/queries/` (symbols /
 references / calls). Unparseable files already fall back to line windows —
 the indexer must never crash on weird input.
 
+## Sign-off required (DCO)
+
+All commits in pull requests must include a `Signed-off-by` line — use
+`git commit -s`. By signing off you certify the
+[Developer Certificate of Origin 1.1](https://developercertificate.org/):
+that you wrote the change or otherwise have the right to submit it under
+the project's license. One sentence on why: DCO sign-off keeps the
+provenance of every line clean and preserves the project's ability to make
+future licensing decisions without chasing down untraceable contributions.
+
+Maintainer commits made before this policy was introduced (2026-07-05)
+predate the sign-off requirement; every one of them is authored by the
+sole copyright holder.
+
+## Licensing
+
+Contributions are accepted under **Apache-2.0** with DCO sign-off — no CLA.
+Contributors retain copyright to their contributions; you license them to
+the project and its users under Apache-2.0 (including the Section 3 patent
+grant). Be aware the project may offer commercial licensing or hosted
+services in the future; the Apache-2.0 grant on your contribution is what
+makes that possible without further paperwork.
+
 ## Style
 
 Match the surrounding code. Type hints everywhere, docstrings explain *why*,

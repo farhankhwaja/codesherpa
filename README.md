@@ -180,4 +180,5 @@ choice), `EVAL_LOG.md` (append-only benchmark record). See CONTRIBUTING.md.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+Apache-2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE). Contributions are
+accepted under Apache-2.0 with DCO sign-off (see CONTRIBUTING.md).

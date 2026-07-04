@@ -10,7 +10,7 @@ user-facing command/MCP/index `sherpa` (D37). CLAUDE.md still says
 ## Done (one line each, with commit hash)
 - Phase 5 merged (verifier PASS 284/284; A/B v1 target miss filed B3) — 3d44a72
 - Rename repograph→sherpa/codesherpa (D37; clean-checkout green) — 47e8d26
-- README (real EVAL_LOG numbers + honest limitations), LICENSE (MIT),
+- README (real EVAL_LOG numbers + honest limitations), LICENSE (MIT at ship; relicensed Apache-2.0 + NOTICE + DCO policy, sole-author relicense verified — 50/50 commits Farhan),
   CONTRIBUTING, install-flow verification — 8efce06 + this branch
 - D38/D38-final: embedding memory blowup found dogfooding (single-line JSONL
   → mega-chunks → 3k-token batches → 10–15 GB RSS); fixed with fallback

@@ -640,3 +640,25 @@ no code change, bump the scale to 5 in a one-line commit citing that run,
 and STOP there — 2,500 ms still fails hard on any genuine ~3x regression.
 No further bumps without a new DECISIONS entry explaining why the runner
 class itself changed.
+
+## D42 — Relicense MIT → Apache-2.0 + DCO contribution policy (human instruction, pre-public)
+Relicense executed before the repo goes public. Clean because the sole-
+copyright-holder assumption was VERIFIED, not assumed: `git log` authorship
+and committer identity are 100 % Farhan Khwaja <farhan.khwaja@gmail.com>
+(50/50 commits, no second identity, no co-author trailers) — nothing to
+flag. Changes: full standard Apache-2.0 text in LICENSE (appendix
+boilerplate filled: Copyright 2026 Farhan Khwaja); NOTICE file per Apache
+convention; pyproject moves to a PEP 639 SPDX expression
+(`license = "Apache-2.0"`, license-files incl. NOTICE; build-system bumped
+to setuptools>=77 which introduced PEP 639 support — verified: built
+metadata emits `License-Expression: Apache-2.0`); README license section
+updated. CONTRIBUTING gains "Sign-off required (DCO 1.1, git commit -s,
+developercertificate.org)" — provenance stays clean and the project keeps
+the ability to make future licensing decisions (commercial licensing or
+hosted services are explicitly possible); contributors retain copyright,
+no CLA; maintainer commits predate the policy. Note: the user-referenced
+"test asserting LICENSE exists" did not exist — added
+tests/test_licensing.py so the legal posture is now pinned by the suite.
+Historical records (CLAUDE.md §10's "LICENSE (MIT)" checklist line, past
+verifier reports, EVAL_LOG) intentionally keep the old wording; PROGRESS
+records "MIT at ship; relicensed Apache-2.0".
