@@ -104,3 +104,23 @@ unexpected error logs a warning and falls back to line windows (§7.2 "never
 crash the indexer"). Regression tests: deeply nested JS + Python inputs.
 Finding 1 (tree-sitter deps missing from pyproject.toml) fixed in the same
 commit; finding 3 (no direct JS test) addressed with a JS class/breadcrumb test.
+
+## D14 — Golden-test hardening between Phases 2 and 3 (no phase boundary)
+Four changes on core-index-owned files, prompted by review:
+(a) `op_merge_change`: merges previously used only `-s ours` (tree never
+moved); the new op commits a fresh file on a side branch and merges it back
+with the default strategy + `--no-ff`, so the post-merge/git-pull scenario
+(merge introduces new blobs) is genuinely covered. Ops abort cleanly on
+unexpected conflict to stay total.
+(b) `GOLDEN_DEEP=1` env gate: derandomize off, max_examples 25 — a
+randomized soak that must pass once before the Phase 5 merge (documented in
+the module docstring). Default run unchanged (fast, derandomized, <120 s).
+(c) Fixture v2: `webclient/scripts/export_tasks.js` (class TaskExporter +
+exported formatTaskRow, verified to load under node) added as commit 7 of the
+build script — closes the Phase 2 verifier's "no plain .js in fixture" note.
+Earlier commit SHAs are unchanged (append-only history). A version marker in
+the built repo's `.git/` (`FIXTURE_VERSION`) makes conftest rebuild stale
+prebuilt fixtures; conftest.py edited under fixtures-infrastructure ownership.
+(d) `golden_state()` refactored to a declarative `GOLDEN_PROJECTION` extractor
+map. Phases 3 and 4 MUST extend it (embeddings; symbols+edges) and hold an
+explicit ownership exception to edit that map/their extractors only.

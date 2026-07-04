@@ -2,10 +2,16 @@
 
 Incremental index == full rebuild. From the miniproject fixture, perform a
 random (hypothesis-driven) sequence of >=10 git operations — commit new file,
-modify, delete, branch, switch, merge, revert — running ``repograph sync``
-after each. The final incremental DB state (active blobs, files mapping,
-chunks of active blobs, FTS rows of active blobs) must be IDENTICAL to a
-from-scratch rebuild at the same HEAD.
+modify, delete, branch, switch, merge (both a tree-changing merge and the
+degenerate `-s ours` flavor), revert — running ``repograph sync`` after each.
+The final incremental DB state (active blobs, files mapping, chunks of active
+blobs, FTS rows of active blobs) must be IDENTICAL to a from-scratch rebuild
+at the same HEAD.
+
+Deep mode: ``GOLDEN_DEEP=1`` disables example derandomization and raises
+max_examples to 25 for a longer randomized soak. The default (fast,
+derandomized) run keeps CI inside the <120 s budget; **deep mode must pass at
+least once before the Phase 5 merge** (record the run in EVAL_LOG.md).
 
 This file must exist before the indexer is written and must pass before every
 merge to main. It may never be deleted, skipped, or weakened.
@@ -15,7 +21,6 @@ from __future__ import annotations
 
 import os
 import shutil
-import sqlite3
 import subprocess
 from pathlib import Path
 
@@ -62,7 +67,9 @@ class RepoDriver:
     def tracked_text_files(self) -> list[str]:
         out = self.git("ls-files").stdout.splitlines()
         return sorted(
-            p for p in out if p.endswith((".py", ".ts", ".tsx", ".md")) and not p.startswith(".")
+            p
+            for p in out
+            if p.endswith((".py", ".ts", ".tsx", ".js", ".md")) and not p.startswith(".")
         )
 
     def current_branch(self) -> str:
@@ -140,8 +147,35 @@ class RepoDriver:
             return
         victim = others[seed % len(others)]
         # -s ours always succeeds (no conflicts) while still creating a merge
-        # commit; tree churn is exercised by the other ops.
+        # commit; this is the degenerate flavor — op_merge_change below is the
+        # one that makes merges actually move the tree.
         self.git("merge", "-q", "-s", "ours", "--no-edit", victim)
+
+    def op_merge_change(self, seed: int) -> None:
+        """The real post-merge/git-pull scenario: a side branch adds a new
+        file (never conflicts) and is merged back with the default strategy,
+        so the merge itself introduces new blobs that sync must pick up."""
+        base = self.current_branch()
+        self.counter += 1
+        n = self.counter
+        side = f"golden-side-{n}"
+        self.git("checkout", "-q", "-b", side)
+        rel = f"pyserver/merged_mod_{n}.py"
+        target = self.path / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(
+            f'"""Module merged from a side branch (seed {seed})."""\n\n\n'
+            f"def merged_func_{n}() -> int:\n"
+            f"    return {seed % 89}\n",
+            encoding="utf-8",
+        )
+        self.commit_all(f"side work {n}")
+        self.git("checkout", "-q", base)
+        # --no-ff forces a true merge commit; the new file cannot conflict,
+        # but abort cleanly if anything unexpected happens (op stays total).
+        result = self.git("merge", "-q", "--no-ff", "--no-edit", side, check=False)
+        if result.returncode != 0:
+            self.git("merge", "--abort", check=False)
 
     def op_revert(self) -> None:
         # Only revert simple (non-merge) commits; abort on any conflict so the
@@ -167,40 +201,75 @@ class RepoDriver:
             self.op_switch_main()
         elif kind == "merge":
             self.op_merge(op[1])
+        elif kind == "merge_change":
+            self.op_merge_change(op[1])
         elif kind == "revert":
             self.op_revert()
         else:  # pragma: no cover - strategy and interpreter must stay in sync
             raise AssertionError(f"unknown op {op!r}")
 
 
-def golden_state(db_path: Path) -> dict:
-    """The comparable 'active' projection of an index DB.
+def _project_active_blobs(store: SQLiteIndexStore) -> set[str]:
+    return store.active_blobs()
 
-    Incremental DBs legitimately retain INACTIVE rows (soft deactivation is
-    the design), so equality is defined over the active projection only:
-    active blob set, HEAD file mapping, chunk identity+code per active blob,
-    and which active chunks are present in FTS.
+
+def _project_files_head(store: SQLiteIndexStore) -> dict[str, str]:
+    return store.files_for_ref("HEAD")
+
+
+def _project_chunks(store: SQLiteIndexStore) -> dict[str, list[tuple[str, str]]]:
+    return {
+        blob: [(c.chunk_id, c.code) for c in store.chunks_for_blob(blob)]
+        for blob in sorted(store.active_blobs())
+    }
+
+
+def _project_fts(store: SQLiteIndexStore) -> tuple[frozenset[str], tuple[str, ...]]:
+    """(active chunk ids present in FTS, active chunk ids MISSING from FTS).
+
+    The second element must be empty — asserted explicitly by the test — so
+    FTS coverage failures name the exact chunks instead of a bare bool.
     """
+    fts_ids = {
+        row[0] for row in store.conn.execute("SELECT chunk_id FROM chunks_fts")
+    }
+    active_ids = {
+        row[0]
+        for row in store.conn.execute(
+            """
+            SELECT c.chunk_id FROM chunks c
+            JOIN blobs b ON b.blob_hash = c.blob_hash AND b.active = 1
+            """
+        )
+    }
+    return frozenset(fts_ids & active_ids), tuple(sorted(active_ids - fts_ids))
+
+
+# The compared projection, one extractor per logical table. Golden equality is
+# defined over the ACTIVE rows only: incremental DBs legitimately retain
+# inactive rows (soft deactivation is the design).
+#
+# NOTE FOR LATER PHASES: Phase 3 MUST extend this projection with an
+# embeddings extractor and Phase 4 MUST extend it with symbols + edges
+# extractors, so the Golden Test covers their tables too. Those phases are
+# granted an ownership exception to edit GOLDEN_PROJECTION / add their
+# extractor functions here — for their tables only; nothing else in this
+# file may be touched by other worktrees.
+GOLDEN_PROJECTION: dict[str, callable] = {
+    "active_blobs": _project_active_blobs,
+    "files_head": _project_files_head,
+    "chunks_of_active_blobs": _project_chunks,
+    "fts_of_active_chunks": _project_fts,
+}
+
+
+def golden_state(db_path: Path) -> dict:
+    """The comparable 'active' projection of an index DB."""
     store = SQLiteIndexStore(db_path)
     try:
-        active = store.active_blobs()
-        files = store.files_for_ref("HEAD")
-        chunks = {}
-        for blob in sorted(active):
-            chunks[blob] = [(c.chunk_id, c.code) for c in store.chunks_for_blob(blob)]
+        return {name: extract(store) for name, extract in GOLDEN_PROJECTION.items()}
     finally:
         store.close()
-
-    with sqlite3.connect(db_path) as conn:
-        fts_ids = {row[0] for row in conn.execute("SELECT chunk_id FROM chunks_fts")}
-    active_chunk_ids = {cid for per_blob in chunks.values() for cid, _ in per_blob}
-    return {
-        "active_blobs": active,
-        "files": files,
-        "chunks": chunks,
-        "fts_active": fts_ids & active_chunk_ids,
-        "fts_covers_active": active_chunk_ids <= fts_ids,
-    }
 
 
 def _fresh_clone(miniproject: Path, dest: Path) -> RepoDriver:
@@ -216,15 +285,20 @@ _OPS = st.one_of(
     st.tuples(st.just("branch"), st.integers(0, 1000)),
     st.tuples(st.just("switch")),
     st.tuples(st.just("merge"), st.integers(0, 1000)),
+    st.tuples(st.just("merge_change"), st.integers(0, 1000)),
     st.tuples(st.just("revert")),
 )
 
+# GOLDEN_DEEP=1: longer randomized soak (25 fresh examples). Must pass at
+# least once before the Phase 5 merge. Default stays fast + derandomized.
+_DEEP = os.environ.get("GOLDEN_DEEP") == "1"
+
 
 @settings(
-    max_examples=6,
+    max_examples=25 if _DEEP else 6,
     deadline=None,
     suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture],
-    derandomize=True,  # CI-time bound (<120 s) requires a fixed example set
+    derandomize=not _DEEP,  # CI-time bound (<120 s) requires a fixed example set
 )
 @given(ops=st.lists(_OPS, min_size=10, max_size=16))
 @example(  # pinned: every op kind at least once, in a history-churning order
@@ -235,11 +309,13 @@ _OPS = st.one_of(
         ("add", 1, 11),
         ("switch",),
         ("merge", 0),
+        ("merge_change", 5),
         ("modify", 5),
         ("delete", 2),
         ("revert",),
         ("branch", 1),
         ("add", 0, 13),
+        ("merge_change", 17),
         ("switch",),
     ]
 )
@@ -259,8 +335,8 @@ def test_golden_incremental_equals_rebuild(ops, miniproject, tmp_path_factory) -
     incremental = golden_state(inc_db)
     rebuild = golden_state(rebuild_db)
 
-    assert incremental["active_blobs"] == rebuild["active_blobs"]
-    assert incremental["files"] == rebuild["files"]
-    assert incremental["chunks"] == rebuild["chunks"]
-    assert incremental["fts_active"] == rebuild["fts_active"]
-    assert incremental["fts_covers_active"] and rebuild["fts_covers_active"]
+    for name in GOLDEN_PROJECTION:
+        assert incremental[name] == rebuild[name], f"projection {name!r} diverged"
+    # FTS must cover every active chunk on both sides (missing-id tuple empty)
+    assert incremental["fts_of_active_chunks"][1] == ()
+    assert rebuild["fts_of_active_chunks"][1] == ()

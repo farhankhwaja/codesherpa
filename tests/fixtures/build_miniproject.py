@@ -25,6 +25,11 @@ from pathlib import Path
 
 FIXTURE_DIRNAME = "miniproject"
 
+# Bump whenever COMMITS change so prebuilt fixtures rebuild (conftest checks
+# the marker written into the built repo's .git dir).
+FIXTURE_VERSION = 2
+_VERSION_MARKER = "repograph-fixture-version"
+
 _AUTHOR_NAME = "Fixture Bot"
 _AUTHOR_EMAIL = "fixture@example.com"
 _BASE_DATE = "2024-01-{day:02d}T12:00:00+00:00"
@@ -995,6 +1000,58 @@ export async function login(email: string, password: string): Promise<void> {
 """,
 }
 
+_COMMIT_7_JS_TOOLING: dict[str, str | None] = {
+    "webclient/scripts/export_tasks.js": """\
+// Nightly export of completed tasks to TSV (run with: node scripts/export_tasks.js).
+
+'use strict';
+
+const DEFAULT_LIMIT = 500;
+
+function formatTaskRow(task) {
+  const status = task.completedAt ? 'done' : 'open';
+  const title = task.title.replace(/\\t/g, ' ');
+  return [task.id, status, title].join('\\t');
+}
+
+class TaskExporter {
+  constructor(baseUrl, limit = DEFAULT_LIMIT) {
+    this.baseUrl = baseUrl;
+    this.limit = limit;
+  }
+
+  async fetchCompleted() {
+    const res = await fetch(`${this.baseUrl}/tasks?status=done&limit=${this.limit}`);
+    if (!res.ok) {
+      throw new Error(`export failed: HTTP ${res.status}`);
+    }
+    return res.json();
+  }
+
+  async exportTsv(stream) {
+    const tasks = await this.fetchCompleted();
+    for (const task of tasks) {
+      stream.write(formatTaskRow(task) + '\\n');
+    }
+    return tasks.length;
+  }
+}
+
+module.exports = { TaskExporter, formatTaskRow, DEFAULT_LIMIT };
+
+if (require.main === module) {
+  const exporter = new TaskExporter(process.env.TASKHUB_URL || 'http://127.0.0.1:8080');
+  exporter
+    .exportTsv(process.stdout)
+    .then((count) => process.stderr.write(`exported ${count} tasks\\n`))
+    .catch((err) => {
+      process.stderr.write(String(err) + '\\n');
+      process.exit(1);
+    });
+}
+""",
+}
+
 COMMITS: list[tuple[str, dict[str, str | None]]] = [
     ("feat: python server core (models, db, routes, validators)", _COMMIT_1_PY_CORE),
     ("feat: typescript web client (api, store, components)", _COMMIT_2_TS_FRONTEND),
@@ -1002,6 +1059,7 @@ COMMITS: list[tuple[str, dict[str, str | None]]] = [
     ("fix: allow plus-addressed emails; add task priority", _COMMIT_4_FIXES),
     ("feat: webhook notifications, user cache, cli; drop legacy sync", _COMMIT_5_SERVICES),
     ("feat: password hashing and session tokens", _COMMIT_6_AUTH),
+    ("chore: nightly task export script (node)", _COMMIT_7_JS_TOOLING),
 ]
 
 
@@ -1042,6 +1100,8 @@ def build(dest: Path) -> Path:
             _git(dest, "add", rel_path, day=day)
         _git(dest, "commit", "--quiet", "-m", message, day=day)
 
+    # marker lives inside .git so the fixture's working tree stays clean
+    (dest / ".git" / _VERSION_MARKER).write_text(str(FIXTURE_VERSION), encoding="utf-8")
     return dest
 
 

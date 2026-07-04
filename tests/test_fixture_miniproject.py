@@ -50,6 +50,17 @@ def test_cross_file_imports_and_calls(miniproject: Path) -> None:
     assert "from './TaskItem'" in tasklist
 
 
+def test_javascript_file_present(miniproject: Path) -> None:
+    # added for Phase 2 verifier info-finding: direct JS coverage in the fixture
+    tracked = _git(miniproject, "ls-files").splitlines()
+    js = [f for f in tracked if f.endswith(".js")]
+    assert js, "fixture needs at least one plain .js file"
+    source = (miniproject / "webclient/scripts/export_tasks.js").read_text()
+    assert "class TaskExporter" in source
+    assert "function formatTaskRow(" in source
+    assert "module.exports" in source  # cross-file-callable exports
+
+
 def test_history_includes_modification_and_deletion(miniproject: Path) -> None:
     # validators.py was modified after its introduction (bugfix commit)
     touches = _git(miniproject, "log", "--oneline", "--follow", "--", "pyserver/validators.py")

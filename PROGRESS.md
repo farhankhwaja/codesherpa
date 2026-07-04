@@ -1,10 +1,9 @@
 # Progress
 
 ## Current phase & worktree
-Phases 1–2 COMPLETE (worktree `core-index`, Verifier PASS on both) and merged
-to `main` per §3.3. Next: Phase 3 (embeddings + retrieval) in worktree
-`retrieval` and Phase 4 (graph + MCP) in worktree `graph-mcp`, both building
-against the frozen contracts and the now-real store.
+Phases 1–2 COMPLETE and merged; golden-test hardening follow-up (D14) done in
+`core-index` and merged to main. Next: Phase 3 (embeddings + retrieval) in
+worktree `retrieval` and Phase 4 (graph + MCP) in worktree `graph-mcp`.
 
 ## Done (one line each, with commit hash)
 - Phase 0: contracts, fixture builder, gold set, verifier agent, PASS — dc77f33
@@ -17,6 +16,7 @@ against the frozen contracts and the now-real store.
 - cAST chunker (tree-sitter Py/TS/JS/TSX, byte-exact, breadcrumbs+docstrings); 88 tests; D10–D12 — c2caf44
 - Verifier Phase 2 round 1 FAIL fixes: deps declared, recursion-proofed (depth cap 50 + fallback net), JS test; 91 tests; D13 — f8284da
 - Phase 2 Verifier PASS (supersedes FAIL) — bd05580
+- Golden hardening: real-merge op, GOLDEN_DEEP soak (25/25 pass), fixture v2 with export_tasks.js, declarative GOLDEN_PROJECTION; D14 — (hardening commit)
 
 ## In progress
 Nothing in core-index. Store/gitlayer/chunker are live on main.
@@ -37,9 +37,13 @@ None.
   (D9); golden equality = ACTIVE projection.
 - Chunker: add a language = one entry in `chunker/languages.py`. Depth cap 50
   then hard split (D13). Docstrings may be bare `string` nodes (D12).
-- Fixture has no plain .js file (verifier info-note) — fine for Phase 2; a
-  later fixture addition is allowed (core-index owns fixtures) but would
-  change fixture SHAs, so coordinate with gold-set/eval work first.
+- Fixture is v2 (adds webclient/scripts/export_tasks.js as commit 7; earlier
+  SHAs unchanged). Prebuilt fixtures auto-rebuild via the version marker in
+  .git/repograph-fixture-version (bump FIXTURE_VERSION when COMMITS change).
+- Golden projection: Phases 3/4 MUST extend GOLDEN_PROJECTION in
+  tests/test_golden.py (embeddings; symbols+edges) — explicit ownership
+  exception recorded there and in D14. GOLDEN_DEEP=1 soak must pass once
+  before the Phase 5 merge.
 - Phase 3 eval gates (§13): recall@5 ≥0.80, MRR ≥0.60, beat BM25-only and
   vector-only; p95 <500ms warm, router path <200ms/<50ms.
 - GPG signing requires unsandboxed git commits (gpg agent socket).

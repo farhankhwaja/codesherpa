@@ -10,8 +10,21 @@ FIXTURES_DIR = Path(__file__).parent / "fixtures"
 MINIPROJECT_DIR = FIXTURES_DIR / "miniproject"
 
 
-def _is_built(path: Path) -> bool:
+def _load_builder():
+    sys.path.insert(0, str(FIXTURES_DIR))
+    try:
+        import build_miniproject
+    finally:
+        sys.path.pop(0)
+    return build_miniproject
+
+
+def _is_built(path: Path, builder) -> bool:
     if not (path / ".git").is_dir():
+        return False
+    # a prebuilt fixture from an older builder version must be rebuilt
+    marker = path / ".git" / builder._VERSION_MARKER
+    if not marker.is_file() or marker.read_text().strip() != str(builder.FIXTURE_VERSION):
         return False
     result = subprocess.run(
         ["git", "rev-list", "--count", "HEAD"],
@@ -29,11 +42,7 @@ def miniproject(tmp_path_factory: pytest.TempPathFactory) -> Path:
     The generated repo lives at tests/fixtures/miniproject/ (gitignored in the
     outer repo); the build script is the committed source of truth.
     """
-    if not _is_built(MINIPROJECT_DIR):
-        sys.path.insert(0, str(FIXTURES_DIR))
-        try:
-            import build_miniproject
-        finally:
-            sys.path.pop(0)
-        build_miniproject.build(MINIPROJECT_DIR)
+    builder = _load_builder()
+    if not _is_built(MINIPROJECT_DIR, builder):
+        builder.build(MINIPROJECT_DIR)
     return MINIPROJECT_DIR
