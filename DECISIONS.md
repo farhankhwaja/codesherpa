@@ -604,3 +604,39 @@ large-repo benchmarks where navigation dominates harder (roadmap item).
 BLOCKED.md is deleted per its own charter (it exists only while something
 needs the human); B3's full history stays in git, EVAL_LOG (v1+v2 entries),
 verification/ab/ab-results*.md, and D35/D39/this entry.
+
+## D41 — CI latency gates: hardware calibration, not a threshold reduction (post-ship)
+First CI run on GitHub's 2-core hosted ubuntu runner failed
+`test_p95_warm_latency_reranker_on`: p95 = 1,764 ms vs the §13 500 ms gate.
+Not a regression — the identical commit measures p95 178 ms on the machine
+the §13 latency thresholds are defined on (Apple M-series; every EVAL_LOG
+latency entry names that hardware). Human decision: latency gates are
+hardware-relative; correctness gates are not. Implemented exactly that,
+nothing broader:
+- `SHERPA_LATENCY_BUDGET_SCALE` env var (default 1.0) applied ONLY to the
+  two latency assertions in tests/test_eval_gate.py (500 ms warm, 200 ms
+  router). All recall/MRR/memory/golden assertions remain unconditional
+  and unscaled.
+- ci.yml sets SHERPA_LATENCY_BUDGET_SCALE=4 on the suite step with an
+  inline comment citing the 2-core-runner calibration and the measured
+  1,764 ms. A future ~10x regression still fails CI even at scale 4.
+- Both latency tests PRINT the measured p95 and the effective budget pass
+  or fail, so CI logs surface latency drift on the runner over time.
+- The unscaled gate remains enforced for every local/verifier run. §13
+  thresholds themselves are untouched.
+Also observed on that run and reported, not hidden: 1 skip ('...s...')
+where the suite historically had zero — tests/test_embed_memory.py::
+test_dense_json_batch_embeds_with_bounded_rss. Its skipif evaluates
+`model_is_cached(nomic)` at COLLECTION time; on a cold-cache Linux runner
+the model only downloads mid-suite (inside the eval gates), so the
+real-model RSS regression test skips on that first pass. It executes
+everywhere the cache is warm: all local runs, and CI runs after the first
+green run saves the model cache (actions/cache saves only on success).
+The max_seq_length clamp unit test beside it runs unconditionally.
+Pre-declared flake policy (decided now so future sessions don't drift):
+scale 4 = a 2,000 ms budget vs the measured 1,764 ms — only ~12 % margin on
+a shared runner with noisy neighbors. If the latency gate flakes ONCE with
+no code change, bump the scale to 5 in a one-line commit citing that run,
+and STOP there — 2,500 ms still fails hard on any genuine ~3x regression.
+No further bumps without a new DECISIONS entry explaining why the runner
+class itself changed.
