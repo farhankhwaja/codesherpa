@@ -337,3 +337,6 @@ Thresholds may never be edited downward. If a threshold proves unreachable after
 ## 15. Spirit Clause
 
 Where this spec is silent, choose the option that best serves: (1) index freshness/correctness, (2) retrieval quality, (3) token frugality of responses, (4) zero-friction local install — in that order. You are encouraged to improve on this spec (better ranking features, smarter breadcrumbs, cleverer packing) **as long as every rule in §2 and every gate in §10/§13 still holds**, and each improvement is recorded in `DECISIONS.md` with before/after eval numbers. Make it worth using.
+
+
+NOTE: **whatever you commit do not add Claude as the Author!!**
