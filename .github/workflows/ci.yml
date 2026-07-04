@@ -20,8 +20,12 @@ jobs:
         with:
           python-version: "3.12"
 
-      # the eval gates load real models (~750 MB, downloaded once) — cache them
-      - uses: actions/cache@v4
+      # the eval gates load real models (~750 MB, downloaded once).
+      # restore/save are SPLIT: plain actions/cache only saves on job
+      # SUCCESS, so failing runs never persisted the cache and every run
+      # stayed cold (slow latency gates AND the embed_memory RSS test
+      # skipping at collection). The explicit save below runs `if: always()`.
+      - uses: actions/cache/restore@v4
         with:
           path: |
             ~/.cache/sherpa
@@ -53,11 +57,12 @@ jobs:
         env:
           # Hardware calibration for the 2-core hosted runner (D41): the §13
           # latency gates are defined on reference hardware (Apple M-series,
-          # p95 178 ms); this runner measured 1,764 ms for the identical
-          # suite. Scale x4 keeps a hard regression gate (a future 10x
-          # slowdown still fails) without pretending this VM is the
-          # reference machine. Thresholds themselves are unchanged.
-          SHERPA_LATENCY_BUDGET_SCALE: "4"
+          # p95 178 ms); this runner measured 1,764 ms, then flaked at
+          # 2,083 ms vs the 2,000 ms scale-4 budget with no code change
+          # (run for 5f83342, 2026-07-05) — the pre-declared D41 flake
+          # policy applies: scale 5 (2,500 ms), final. A genuine ~3x
+          # regression still fails. Thresholds themselves are unchanged.
+          SHERPA_LATENCY_BUDGET_SCALE: "5"
         run: |
           . .venv/bin/activate
           # -rs: any skip must name itself in the log (the suite is
@@ -68,3 +73,13 @@ jobs:
         run: |
           . .venv/bin/activate
           python -m pytest tests/test_golden.py -q
+
+      # persist the model cache even when tests fail — otherwise cold runs
+      # can never warm up (D41)
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: |
+            ~/.cache/sherpa
+            ~/.cache/huggingface
+          key: models-${{ runner.os }}-${{ hashFiles('pyproject.toml') }}
