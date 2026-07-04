@@ -1,0 +1,25 @@
+{"id": "q01", "type": "nl", "query": "where is the retry logic for http requests", "expected_files": ["pyserver/http_client.py", "webclient/src/http.ts"], "expected_symbols": ["retry_request", "fetchWithRetry"]}
+{"id": "q02", "type": "nl", "query": "how do we validate email addresses", "expected_files": ["pyserver/validators.py"], "expected_symbols": ["validate_email"]}
+{"id": "q03", "type": "nl", "query": "code that converts a task title into a url slug", "expected_files": ["pyserver/utils/text.py"], "expected_symbols": ["slugify"]}
+{"id": "q04", "type": "nl", "query": "where are new tasks created on the server", "expected_files": ["pyserver/routes/tasks.py"], "expected_symbols": ["create_task"]}
+{"id": "q05", "type": "nl", "query": "how does the frontend fetch the list of tasks from the api", "expected_files": ["webclient/src/api.ts"], "expected_symbols": ["fetchTasks"]}
+{"id": "q06", "type": "nl", "query": "password hashing implementation", "expected_files": ["pyserver/auth.py"], "expected_symbols": ["hash_password"]}
+{"id": "q07", "type": "nl", "query": "in-memory cache with ttl used for user lookups", "expected_files": ["pyserver/cache.py"], "expected_symbols": ["MemoCache"]}
+{"id": "q08", "type": "nl", "query": "how are relative dates like '3h ago' rendered in the ui", "expected_files": ["webclient/src/utils/dates.ts"], "expected_symbols": ["formatRelative"]}
+{"id": "q09", "type": "nl", "query": "where do we send a webhook notification when a task changes", "expected_files": ["pyserver/services/notifications.py"], "expected_symbols": ["send_task_notification"]}
+{"id": "q10", "type": "nl", "query": "how is application configuration loaded from a json file or environment", "expected_files": ["pyserver/config.py"], "expected_symbols": ["load_config"]}
+{"id": "q11", "type": "nl", "query": "sqlite database connection and schema setup", "expected_files": ["pyserver/db.py"], "expected_symbols": ["Database", "connect"]}
+{"id": "q12", "type": "nl", "query": "react component that renders a single task row with a done button", "expected_files": ["webclient/src/components/TaskItem.tsx"], "expected_symbols": ["TaskItem"]}
+{"id": "q13", "type": "nl", "query": "where does the web client store the auth token in localStorage", "expected_files": ["webclient/src/auth.ts"], "expected_symbols": ["storeToken"]}
+{"id": "q14", "type": "nl", "query": "how do task status values like open and done get modeled", "expected_files": ["pyserver/models/task.py"], "expected_symbols": ["TaskStatus"]}
+{"id": "q15", "type": "symbol", "query": "retry_request", "expected_files": ["pyserver/http_client.py"], "expected_symbols": ["retry_request"]}
+{"id": "q16", "type": "symbol", "query": "TaskStore", "expected_files": ["webclient/src/store.ts"], "expected_symbols": ["TaskStore"]}
+{"id": "q17", "type": "symbol", "query": "validate_title", "expected_files": ["pyserver/validators.py"], "expected_symbols": ["validate_title"]}
+{"id": "q18", "type": "symbol", "query": "task_from_row", "expected_files": ["pyserver/models/task.py"], "expected_symbols": ["task_from_row"]}
+{"id": "q19", "type": "symbol", "query": "fetchWithRetry", "expected_files": ["webclient/src/http.ts"], "expected_symbols": ["fetchWithRetry"]}
+{"id": "q20", "type": "symbol", "query": "create_session_token", "expected_files": ["pyserver/auth.py"], "expected_symbols": ["create_session_token"]}
+{"id": "q21", "type": "symbol", "query": "humanize_delta", "expected_files": ["pyserver/utils/time.py"], "expected_symbols": ["humanize_delta"]}
+{"id": "q22", "type": "stacktrace", "query": "Traceback (most recent call last):\n  File \"pyserver/routes/tasks.py\", line 32, in complete_task\n    task_id = payload[\"task_id\"]\nKeyError: 'task_id'", "expected_files": ["pyserver/routes/tasks.py"], "expected_symbols": ["complete_task"]}
+{"id": "q23", "type": "stacktrace", "query": "TypeError: Cannot read properties of undefined (reading 'title')\n    at TaskItem (webclient/src/components/TaskItem.tsx)", "expected_files": ["webclient/src/components/TaskItem.tsx"], "expected_symbols": ["TaskItem"]}
+{"id": "q24", "type": "stacktrace", "query": "Traceback (most recent call last):\n  File \"pyserver/routes/users.py\", in create_user\n  File \"pyserver/validators.py\", in validate_email\nValueError: invalid email: 'not-an-email'", "expected_files": ["pyserver/validators.py", "pyserver/routes/users.py"], "expected_symbols": ["validate_email", "create_user"]}
+{"id": "q25", "type": "stacktrace", "query": "Error: request failed after 3 retries: /api/login\n    at fetchWithRetry (webclient/src/http.ts)", "expected_files": ["webclient/src/http.ts"], "expected_symbols": ["fetchWithRetry"]}
