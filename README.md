@@ -1,17 +1,17 @@
-# sherpa
+# codesherpa
 
 **A git-native, self-updating structural memory for your codebase.** Index
 once, stay fresh forever, and let any LLM agent retrieve exactly the code
 context it needs over MCP — function-level chunks under a token budget
 instead of grep-and-read-the-whole-file.
 
-- PyPI distribution: **`codesherpa`** · Python imports: `import codesherpa`
+- Package & imports: **`codesherpa`** ([PyPI name reserved](https://github.com/farhankhwaja/codesherpa); until the first PyPI release, install from GitHub)
 - Command line & MCP server: **`sherpa`** · index lives in `.sherpa/`
 
 ## Quickstart (3 commands)
 
 ```bash
-pip install codesherpa
+pip install git+https://github.com/farhankhwaja/codesherpa   # pip install codesherpa once on PyPI
 sherpa init                       # in your repo: hooks + first index + embeddings
 claude mcp add sherpa -- python -m codesherpa.mcp_server "$PWD"
 ```
@@ -157,7 +157,7 @@ what sherpa retrieves.
 ## Development
 
 ```bash
-git clone <this repo> && cd sherpa
+git clone https://github.com/farhankhwaja/codesherpa && cd codesherpa
 python -m venv .venv && . .venv/bin/activate   # Python ≥ 3.11
 pip install -e ".[dev]"
 python -m pytest -q          # full suite incl. golden + eval gates (~8 min, models download once)
