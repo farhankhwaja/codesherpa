@@ -43,6 +43,11 @@ as read-only except for your report file and throwaway scratch dirs.
    probably wasn't tested for, e.g.: index a file with emoji identifiers, a
    5 MB generated JS file, a symlink loop, an empty repo, a file with CRLF
    line endings, a UTF-16 file. Use a scratch directory. Record what happened.
+   STANDING ATTACK (D38-final, every phase from 6 on): run `sherpa init` on a
+   clean clone of THIS repo under `/usr/bin/time -l` and assert peak RSS
+   stays under 6 GB and the embedding pass reaches 100 % — the repo's own
+   single-line JSONL transcripts are the regression corpus for the embedding
+   memory blowup.
 
 6. **Write the report** to `verification/phase-N-report.md` in your worktree
    AND include the full report verbatim in your final message (the invoking
