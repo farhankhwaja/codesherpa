@@ -29,6 +29,7 @@ _COMMENT_MARKER = {
     "javascript": "//",
     "typescript": "//",
     "tsx": "//",
+    "go": "//",
 }
 
 

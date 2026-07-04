@@ -27,7 +27,7 @@ FIXTURE_DIRNAME = "miniproject"
 
 # Bump whenever COMMITS change so prebuilt fixtures rebuild (conftest checks
 # the marker written into the built repo's .git dir).
-FIXTURE_VERSION = 2
+FIXTURE_VERSION = 3
 _VERSION_MARKER = "sherpa-fixture-version"
 
 _AUTHOR_NAME = "Fixture Bot"
@@ -1052,6 +1052,128 @@ if (require.main === module) {
 """,
 }
 
+
+
+# Commit 8 (fixture v3, Phase A go-support): a small Go export service.
+# APPEND-ONLY: earlier commits and their SHAs are untouched (D14 pattern).
+_COMMIT_8_GO_SERVICE: dict[str, str | None] = {
+    "go.mod": """\
+module example.com/taskhub
+
+go 1.22
+""",
+    "goexport/archive.go": """\
+// Package goexport batches completed task rows and hands them to a sink.
+package goexport
+
+import "strings"
+
+const MaxBatch = 16
+
+// Archive accumulates rows until MaxBatch, then emits them as one blob.
+type Archive struct {
+\tentries []string
+\tsink    Sink
+}
+
+func NewArchive(sink Sink) *Archive {
+\treturn &Archive{sink: sink}
+}
+
+// Add stores a row; when the batch is full it emits automatically.
+func (a *Archive) Add(row string) error {
+\ta.entries = append(a.entries, row)
+\tif len(a.entries) >= MaxBatch {
+\t\treturn a.Flush()
+\t}
+\treturn nil
+}
+
+// Flush emits every stored row as a single compacted blob.
+func (a *Archive) Flush() error {
+\tif len(a.entries) == 0 {
+\t\treturn nil
+\t}
+\tblob := CompactRows(a.entries)
+\ta.entries = a.entries[:0]
+\treturn a.sink.Deliver(blob)
+}
+
+// Size reports the number of rows waiting in the batch.
+func (a *Archive) Size() int {
+\treturn len(a.entries)
+}
+
+var _ = strings.TrimSpace // keep the import honest for the fixture
+""",
+    "goexport/sink.go": """\
+package goexport
+
+import "fmt"
+
+// Sink receives one compacted blob per emission.
+type Sink interface {
+\tDeliver(blob string) error
+}
+
+// PrintSink is the default Sink: it prints blobs to stdout.
+type PrintSink struct {
+\tprefix string
+}
+
+func NewPrintSink(prefix string) *PrintSink {
+\treturn &PrintSink{prefix: prefix}
+}
+
+func (p *PrintSink) Deliver(blob string) error {
+\t_, err := fmt.Println(p.prefix + blob)
+\treturn err
+}
+""",
+    "goexport/compact.go": """\
+package goexport
+
+import "strings"
+
+// CompactRows joins rows into one newline-separated blob, dropping blanks.
+func CompactRows(rows []string) string {
+\tkept := make([]string, 0, len(rows))
+\tfor _, row := range rows {
+\t\tif strings.TrimSpace(row) != "" {
+\t\t\tkept = append(kept, row)
+\t\t}
+\t}
+\treturn strings.Join(kept, "\\n")
+}
+""",
+    "gorunner/main.go": """\
+// Command gorunner drains the task export queue through goexport.
+package main
+
+import (
+\tax "example.com/taskhub/goexport"
+)
+
+func drain(rows []string) error {
+\tsink := ax.NewPrintSink("export: ")
+\tvar spool ax.Archive = *ax.NewArchive(sink)
+\tfor _, row := range rows {
+\t\tif err := spool.Add(row); err != nil {
+\t\t\treturn err
+\t\t}
+\t}
+\treturn spool.Flush()
+}
+
+func main() {
+\tif err := drain([]string{"t1\\tdone", "t2\\tdone"}); err != nil {
+\t\tpanic(err)
+\t}
+}
+""",
+}
+
+
 COMMITS: list[tuple[str, dict[str, str | None]]] = [
     ("feat: python server core (models, db, routes, validators)", _COMMIT_1_PY_CORE),
     ("feat: typescript web client (api, store, components)", _COMMIT_2_TS_FRONTEND),
@@ -1060,6 +1182,7 @@ COMMITS: list[tuple[str, dict[str, str | None]]] = [
     ("feat: webhook notifications, user cache, cli; drop legacy sync", _COMMIT_5_SERVICES),
     ("feat: password hashing and session tokens", _COMMIT_6_AUTH),
     ("chore: nightly task export script (node)", _COMMIT_7_JS_TOOLING),
+    ("feat: go export service (archive batching, sinks, runner)", _COMMIT_8_GO_SERVICE),
 ]
 
 

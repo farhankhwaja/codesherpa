@@ -26,6 +26,7 @@ LANGUAGE_BY_EXTENSION = {
     ".mjs": "javascript",
     ".cjs": "javascript",
     ".jsx": "javascript",
+    ".go": "go",
 }
 
 

@@ -98,4 +98,26 @@ LANGUAGES: dict[str, LanguageSpec] = {
             }
         ),
     ),
+    "go": LanguageSpec(
+        grammar="go",
+        scope_types=frozenset(
+            {
+                "function_declaration",
+                "method_declaration",  # scope label is "(ReceiverType)" — cast.py
+                "type_spec",  # struct/interface bodies recurse under the type name
+                "const_declaration",
+                "var_declaration",
+            }
+        ),
+        definition_types=frozenset(
+            {
+                "function_declaration",
+                "method_declaration",
+                "type_declaration",
+                "type_spec",
+                "const_declaration",
+                "var_declaration",
+            }
+        ),
+    ),
 }

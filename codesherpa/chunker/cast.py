@@ -81,7 +81,27 @@ class _Piece:
     head: Optional[Node]  # first AST node in the piece, for signature/docstring
 
 
+def _receiver_type(method_node: Node) -> Optional[str]:
+    """Bare receiver type of a Go ``method_declaration`` (pointer stripped):
+    ``func (s *Store) Save(...)`` -> ``Store``."""
+    receiver = method_node.child_by_field_name("receiver")
+    if receiver is None:
+        return None
+    for param in receiver.children:
+        if param.type != "parameter_declaration":
+            continue
+        type_node = param.child_by_field_name("type")
+        if type_node is None or type_node.text is None:
+            continue
+        return type_node.text.decode("utf-8", errors="replace").lstrip("*").strip()
+    return None
+
+
 def _node_name(node: Node) -> str:
+    if node.type == "method_declaration":  # Go: breadcrumb scope is the receiver
+        receiver = _receiver_type(node)
+        if receiver:
+            return f"({receiver})"
     name = node.child_by_field_name("name")
     if name is not None and name.text is not None:
         return name.text.decode("utf-8", errors="replace")
@@ -215,6 +235,16 @@ def _breadcrumb(
 ) -> str:
     marker = breadcrumb_marker(language)
     scope = ".".join(piece.scope) if piece.scope else PurePosixPath(file_path).stem
+    if not piece.scope and piece.head is not None:
+        # Go methods are TOP-LEVEL declarations (unlike class methods, which
+        # inherit a scope by recursion), so a small method chunk would carry
+        # only the file stem — surface the receiver instead:
+        # `path :: (ReceiverType) :: func (s *ReceiverType) Name(...)`
+        head = _descend_to_definition(piece.head, spec)
+        if head.type == "method_declaration":
+            receiver = _receiver_type(head)
+            if receiver:
+                scope = f"({receiver})"
     signature = next((ln.strip() for ln in code.splitlines() if ln.strip()), "")
     if len(signature) > 120:
         signature = signature[:117] + "..."

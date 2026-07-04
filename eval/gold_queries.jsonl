@@ -33,3 +33,7 @@
 {"id": "q33", "type": "nl_hard", "query": "cut off overly long labels with a trailing dots character in the browser ui", "expected_files": ["webclient/src/utils/format.ts"], "expected_symbols": ["formatTitle"]}
 {"id": "q34", "type": "decoy", "query": "when does a user lookup stop being remembered", "expected_files": ["pyserver/cache.py"], "expected_symbols": ["MemoCache"]}
 {"id": "q35", "type": "decoy", "query": "send the owner an email when their task is completed", "expected_files": ["pyserver/services/notifications.py"], "expected_symbols": ["send_task_notification"]}
+{"id": "q36", "type": "nl", "query": "where do completed rows get archived in batches before delivery", "expected_files": ["goexport/archive.go"], "expected_symbols": ["Archive", "Add", "Flush"]}
+{"id": "q37", "type": "symbol", "query": "NewArchive", "expected_files": ["goexport/archive.go"], "expected_symbols": ["NewArchive"]}
+{"id": "q38", "type": "nl_hard", "query": "hold finished work while more keeps coming, letting everything go out together once enough has piled up", "expected_files": ["goexport/archive.go"], "expected_symbols": ["Archive", "Flush"]}
+{"id": "q39", "type": "stacktrace", "query": "goroutine 7 [running]:\nexample.com/taskhub/goexport.(*Archive).Flush(0xc000010250)\n\t/app/goexport/archive.go:41 +0x1f", "expected_files": ["goexport/archive.go"], "expected_symbols": ["Flush"]}
