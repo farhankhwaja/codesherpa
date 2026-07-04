@@ -4,10 +4,11 @@
 Phase 3 (Embeddings + Retrieval) — COMPLETE on `worktree-retrieval`, fully
 integrated with the real store/chunker/graph (Phases 1–2 and 4 are on main).
 Official eval gate PASSES (`eval/run_eval.py --mode all`: hybrid 0.971/0.877,
-strictly beats bm25 0.771 and vector 0.829; exit 0). Awaiting Phase 3
-verifier, then merge per §3.3 (retrieval merges last — graph-mcp already
-merged, order satisfied). After that: Phase 5 (hardening + benchmarks) on
-main.
+strictly beats bm25 0.771 and vector 0.829; exit 0). Verifier **PASS**
+(`verification/phase-3-report.md`; one FAIL round fixed per D29 — deps
+declaration + expired serve probe). Merged to main per §3.3 (retrieval
+merged last; order satisfied). Next: Phase 5 (hardening + benchmarks) on
+main, single session.
 
 ## Done (one line each, with commit hash)
 - Phases 0–2 + golden hardening + Phase 4 (graph, MCP, eval harness,
@@ -29,7 +30,9 @@ main.
   EVAL_LOG
 
 ## In progress
-Phase 3 verifier run, then the §3.3 merge checklist.
+Nothing in retrieval. All six §3.3 boxes checked at merge time (clean-
+checkout suite 273/273 by the verifier, golden green, eval thresholds met +
+logged, verifier PASS committed, contracts untouched, docs updated).
 
 ## Blocked / open questions
 None for Phase 3 (BLOCKED.md removed: B1 resolved by hardened gold set +
