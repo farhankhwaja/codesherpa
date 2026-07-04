@@ -15,3 +15,7 @@ build/
 
 # generated fixture repo — rebuilt by tests/fixtures/build_miniproject.py
 tests/fixtures/miniproject/
+
+.DS_Store
+.claude/worktrees/
+.claude/settings.json
