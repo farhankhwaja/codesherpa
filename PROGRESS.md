@@ -1,10 +1,11 @@
 # Progress
 
 ## Current phase & worktree
-Phase 6 (Ship) — COMPLETE on branch `phase-6`, awaiting final whole-repo
-Verifier + §3.3 merge. Phases 0–5 merged on main; project renamed (D37):
-PyPI dist + package `codesherpa`, user-facing command/MCP/index `sherpa`.
-CLAUDE.md still says "repograph" — same project.
+ALL PHASES COMPLETE — Phase 6 merged to main with final whole-repo Verifier
+PASS (verification/phase-6-report.md; FAIL round on one README number
+preserved alongside). Project shipped as: PyPI dist + package `codesherpa`,
+user-facing command/MCP/index `sherpa` (D37). CLAUDE.md still says
+"repograph" — same project.
 
 ## Done (one line each, with commit hash)
 - Phase 5 merged (verifier PASS 284/284; A/B v1 target miss filed B3) — 3d44a72
@@ -25,8 +26,8 @@ CLAUDE.md still says "repograph" — same project.
   recorded verbatim, B3 updated
 
 ## In progress
-Phase 6 close-out: final full suite → whole-repo Verifier (incl. standing
-memory-ceiling attack) → §3.3 merge to main.
+Nothing. Post-ship candidates live in the README roadmap and TODO(upgrade)
+markers.
 
 ## Blocked / open questions
 - BLOCKED.md B3 (updated): compact-first shipped + v2 measured; raw-token
