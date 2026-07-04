@@ -1,33 +1,42 @@
-"""Phase 3 eval harness on the REAL index (gitlayer -> cAST -> SQLite store)
-with the real embedding model and cross-encoder (downloads on first run,
-cached under ~/.cache/repograph/).
+"""Phase 3 eval gate (CLAUDE.md §10/§13) on the REAL index (gitlayer -> cAST
+-> SQLite store -> symbol graph) with the real embedding model and
+cross-encoder (downloads on first run, cached under ~/.cache/repograph/).
 
-GRADING STATUS (DECISIONS D21, BLOCKED.md): the §13 QUALITY gate — recall@5
->= 0.80, MRR >= 0.60, hybrid strictly beats BM25-only and vector-only — is
-DEFERRED by human instruction (2026-07-04) until the hardened gold set from
-the graph-mcp session lands on main: the current 25-query set has heavy
-query/code vocabulary overlap, so single-method baselines sit at or near the
-recall@5 ceiling and the strictly-beats comparison is not meaningful yet.
-Numbers are still computed on every run, printed here, and logged to
-EVAL_LOG.md marked PRELIMINARY. The thresholds in CLAUDE.md §13 and
-tests/support/gatelib.py are UNCHANGED.
+GATE STATUS: ARMED. Grading was briefly deferred (human instruction
+2026-07-04) while the original 25-query gold set saturated every baseline
+(BM25-only reached recall@5 = 1.00 — query/code vocabulary overlap). The
+hardened set (+8 vocabulary-mismatch NL queries, +2 lexical decoys, 35
+total) landed on main the same day, so the gate is asserted twice below,
+thresholds unmodified:
 
-What IS asserted here (not gold-set-difficulty-dependent):
-- p95 warm latency (reranker on) < 500 ms; router-path p95 < 200 ms (§13)
-- the permanent embedding cache computes 0 new embeddings on re-index (§7.4)
-- every gold query returns a non-empty packed response (pipeline sanity)
+1. The OFFICIAL gate: ``eval/run_eval.py --mode all`` (Phase 4's harness,
+   D17 factory contract, file-level hits) must exit 0.
+2. This module's internal harness: same §13 thresholds under the STRICTER
+   symbol-aware relevance (a hit must come from an expected file AND mention
+   an expected symbol), plus the latency gates.
+
+History: DECISIONS D21 (gold-set hardening), D22-D26, EVAL_LOG.
 """
 
 from __future__ import annotations
 
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
 import pytest
 
 from tests.support.gatelib import (
+    MRR_THRESHOLD,
     P95_ROUTER_MS,
     P95_WARM_MS,
+    RECALL5_THRESHOLD,
     GateHarness,
     format_table,
 )
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture(scope="session")
@@ -40,8 +49,57 @@ def gate(miniproject, tmp_path_factory) -> GateHarness:
 @pytest.fixture(scope="session")
 def reports(gate):
     reps = gate.reports()
-    print("\nPRELIMINARY (gate deferred, D21):\n" + format_table(reps))
+    print("\n" + format_table(reps))  # the EVAL_LOG source table
     return reps
+
+
+# -------------------------------------------------------- official §13 gate
+
+
+def test_official_eval_gate_passes(miniproject, tmp_path_factory):
+    """`python eval/run_eval.py --repo <fixture clone> --mode all` exits 0.
+
+    This is THE Phase 3 gate as written in §10: recall@5 >= 0.80, MRR >=
+    0.60, hybrid strictly beats bm25-only and vector-only. Thresholds are
+    frozen constants inside run_eval.py (Phase 4's harness, D17)."""
+    work = tmp_path_factory.mktemp("officialgate")
+    repo = work / "repo"
+    shutil.copytree(miniproject, repo)
+    shutil.rmtree(repo / ".repograph", ignore_errors=True)
+    proc = subprocess.run(
+        [sys.executable, str(ROOT / "eval" / "run_eval.py"),
+         "--repo", str(repo), "--mode", "all"],
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
+        timeout=1200,
+    )
+    assert proc.returncode == 0, f"gate failed:\n{proc.stdout}\n{proc.stderr[-2000:]}"
+    assert "GATE: PASS" in proc.stdout
+    print("\n" + proc.stdout.strip())  # the EVAL_LOG source table
+
+
+# ------------------------------------- internal harness: §13 quality (strict
+# symbol-aware relevance — stricter than the official file-level hits)
+
+
+def test_recall_at_5_threshold(reports):
+    assert reports["hybrid+rerank"].recall_at_5 >= RECALL5_THRESHOLD
+
+
+def test_mrr_threshold(reports):
+    assert reports["hybrid+rerank"].mrr >= MRR_THRESHOLD
+
+
+def test_hybrid_strictly_beats_bm25_only(reports):
+    assert reports["hybrid+rerank"].recall_at_5 > reports["bm25-only"].recall_at_5
+
+
+def test_hybrid_strictly_beats_vector_only(reports):
+    assert reports["hybrid+rerank"].recall_at_5 > reports["vector-only"].recall_at_5
+
+
+# ---------------------------------------------------------------- §13 latency
 
 
 def test_p95_warm_latency_reranker_on(reports):
@@ -52,6 +110,9 @@ def test_router_path_p95(reports):
     # symbol + stacktrace gold queries resolve through the router fast path
     assert reports["hybrid+rerank"].latency_p95_ms("symbol") < P95_ROUTER_MS
     assert reports["hybrid+rerank"].latency_p95_ms("stacktrace") < P95_ROUTER_MS
+
+
+# ------------------------------------------------------------------- sanity
 
 
 def test_every_gold_query_returns_results(gate):

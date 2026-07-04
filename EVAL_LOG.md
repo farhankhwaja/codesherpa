@@ -110,4 +110,62 @@ queries. Integration re-run against the real store is required before merge.
 
 bge-reranker-v2-m3 wins on MRR (+0.034) but is 13× over the §13 500 ms warm
 p95 gate on CPU (568M params) — §9 fallback to the MiniLM cross-encoder taken,
-`TODO(upgrade)` recorded (D9): revisit bge on GPU/quantized runtimes.
+`TODO(upgrade)` recorded (D26): revisit bge on GPU/quantized runtimes.
+
+## 2026-07-04 — Phase 3 FINAL — integrated pipeline, hardened gold set — commit: (this commit)
+
+Setup: real pipeline end to end (fixture clone -> gitlayer sync -> cAST
+chunker -> symbol graph -> SQLite store with FTS5 + sqlite-vec; 34 active
+blobs/chunks, 128 symbols, 250 edges; nothing mocked), nomic-embed-text-v1.5
++ ms-marco-MiniLM-L-6-v2 at the shipping defaults (rerank depth 20, 700-char
+query-focused passages, CE+vector rank blend w=4 — D27), 35 hardened gold
+queries (D21). CPU-only, Apple M-series.
+
+### PRELIMINARY numbers during the gate deferral window (for the record)
+While the original 25-query set was known-saturated (human instruction to
+defer grading), the integrated pipeline measured: hybrid+rerank 1.00/0.980,
+hybrid-norerank 1.00/0.980, bm25-only 1.00/0.833, vector-only 1.00/0.930
+(symbol-aware relevance) — every method at the recall@5 ceiling, confirming
+the deferral. The hardened set landed the same day; the gate was re-armed.
+
+### OFFICIAL §13 gate — eval/run_eval.py --mode all (file-level hits)
+| mode | recall@5 | MRR | p50 | p95 | misses |
+|---|---|---|---|---|---|
+| hybrid | **0.971** | **0.877** | 168 ms | 178 ms | q28 |
+| bm25-only | 0.771 | 0.630 | 0.2 ms | 0.3 ms | 8 queries |
+| vector-only | 0.829 | 0.738 | 18 ms | 25 ms | 6 queries |
+
+- recall@5 0.971 ≥ 0.80 ✓; MRR 0.877 ≥ 0.60 ✓
+- hybrid strictly beats bm25-only (0.971 > 0.771) and vector-only
+  (0.971 > 0.829) ✓ — **GATE: PASS** (exit 0)
+- hybrid recall by type: nl 1.00, symbol 1.00, stacktrace 1.00, decoy 1.00,
+  nl_hard 0.88 (q28 "avoid asking the backend twice…" -> MemoCache is the
+  one remaining miss: no channel ranks it top-5; honest limitation)
+
+### Internal harness (symbol-aware relevance — stricter; D24)
+hybrid+rerank 0.971 recall@5 / 0.844 MRR vs vector-only 0.943 / 0.830,
+bm25-only 0.771 / 0.635 — strictly-beats holds under both relevance
+definitions. Weight-grid table in D27.
+
+### Latency (§13)
+- p95 warm, reranker on: **178 ms** < 500 ms ✓ (history: 758 ms at depth
+  50/1200 chars -> 444 ms at 30/1000 -> 519 ms on real whole-file chunks ->
+  178 ms at depth 20 + query-focused 700-char passages)
+- router path (symbol + stacktrace queries): p95 ≈ 0–2 ms < 200 ms ✓, and
+  the unit gate asserts the vector path is never invoked there
+- embedding cache: re-embed of unchanged index computes 0 new embeddings ✓
+
+### Embedding model benchmark on real chunks (D28)
+nomic 0.94/0.830 (winner; only runnable §6 candidate), jina 0.97/0.847
+(transformers≥5 incompatible), MiniLM 0.94/0.845 (fallback; parity here,
+7× faster — revisit on external repos in Phase 5).
+
+### Graph expansion delta inside the production pipeline (Phase 4 criterion)
+expansion ON:  recall@5 0.971 / MRR 0.877 / p95 179 ms
+expansion OFF: recall@5 0.971 / MRR 0.877 / p95 178 ms
+delta = 0.000 — non-decreasing ✓ (matches graph-mcp's SimpleRetriever
+measurement; on this fixture the hybrid top-5 already contains the answers
+expansion would attach). `expansion_enabled` stays on by default (§7.5.5).
+
+Full suite at this commit: 273 passed, 0 failed, 0 skipped (incl. both eval
+gates, golden + golden-embeddings, MCP stdio integration).

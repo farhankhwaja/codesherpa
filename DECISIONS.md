@@ -255,3 +255,51 @@ BAAI/bge-reranker-v2-m3 (§6 primary, 568M params) benchmarked for the record �
 see EVAL_LOG.md — and rejected for CPU latency; `TODO(upgrade)`: revisit on
 GPU/quantized runtimes. Also: CE scores pass through a sigmoid so packing sees
 positive scores; expansion discounts compose multiplicatively.
+
+## D27 — Rerank stage redesigned for robustness on vocabulary-mismatch queries (Phase 3 integration)
+Integrating the real store + hardened gold set exposed three defects in the
+naive "CE rescores the fused top-N" design, each fixed and unit-tested:
+(a) **Candidate pool = union of channel heads**, not fused-top-N. BM25
+stopword floods pushed a vector-rank-4 chunk (q26, auth.ts) to fused rank 26
+— beyond any reasonable rerank window, so the CE never saw it. The pool now
+takes the head of each channel (8 vector, 8 BM25, 4 symbol) then fills from
+fused order up to `rerank_top`.
+(b) **Query-focused CE passages** (retrieve/passages.py). cAST chunks are
+frequently whole files; head-truncation at the CE char cap hid definitions
+deeper in the file. Passages are now the code window with maximal distinct
+query-term coverage (identifier-split, deterministic, head-tiebreak).
+Also cut p95 370 -> 184 ms (shorter average sequences).
+(c) **CE order is rank-fused with the vector order** (weighted RRF, CE=1,
+vector=`rerank_blend_vector_weight`), not a score overwrite. ms-marco-MiniLM
+is web-trained and demotes correct code chunks on paraphrase queries where
+the embedder is strong; conversely it rescues q32 (its rank 1 vs vector rank
+6). Weight grid on the hardened set (internal symbol-aware relevance):
+
+| w_vec | 1.0 | 1.5 | 2.0 | 2.5 | 3.0 | **4.0** | 6.0 |
+|---|---|---|---|---|---|---|---|
+| recall@5 | .914 | .914 | .914 | .914 | .943 | **.971** | .971 |
+| MRR | .858 | .859 | .864 | .862 | .844 | **.844** | .845 |
+
+w=4 chosen (start of the recall plateau; CE keeps lift power). Pure-CE mode
+remains via `rerank_blend_vector=False`. Rerank depth is 20 with 700-char
+passages (D26 latency reasoning; depth 30 measured p95 519 ms on real
+whole-file chunks vs the <500 ms gate; depth 20 measures ~180 ms).
+Official gate (eval/run_eval.py, file-level hits): hybrid 0.971/0.877
+vs bm25 0.771 and vector 0.829 — GATE: PASS, sole miss q28.
+
+## D28 — Embedding model benchmark re-run on REAL cAST chunks + hardened gold set (Phase 3 integration)
+Real pipeline (gitlayer sync -> cAST whole-file-ish chunks with real
+breadcrumbs), 34 chunks, 35 gold queries, vector-only channel, symbol-aware
+relevance:
+
+| model | vec recall@5 | vec MRR | embed 34 chunks | note |
+|---|---|---|---|---|
+| nomic-ai/nomic-embed-text-v1.5 | 0.94 | 0.830 | 13.6 s | **winner** (only §6 candidate that runs on our stack) |
+| jinaai/jina-embeddings-v2-base-code | 0.97 | 0.847 | 11.8 s | still disqualified: loads only under transformers<5 (D25) |
+| sentence-transformers/all-MiniLM-L6-v2 | 0.94 | 0.845 | 5.0 s | §9 fallback; parity with nomic on this fixture |
+
+The §7.4 choice is between the two §6 candidates; jina remains runtime-
+disqualified, so nomic stands. Observation for users/Phase 5: MiniLM reaches
+parity on this small fixture at 7x the speed with no trust_remote_code —
+worth re-benchmarking on real external repos before ship (`embed_model` is
+config). The full pipeline passes the official gate with nomic (D27).

@@ -12,20 +12,31 @@ from collections.abc import Sequence
 def rrf_fuse(
     rank_lists: Sequence[Sequence[str]],
     k: int = 60,
+    weights: Sequence[float] | None = None,
 ) -> list[tuple[str, float]]:
     """Fuse ranked id lists into ``[(id, rrf_score)]``, best first.
 
     Each inner list is ordered best-to-worst; ids may appear in any number of
     lists. Ties break lexicographically by id so output is deterministic.
+
+    ``weights`` (optional, one per list) scales each list's contribution:
+    ``score(d) = sum_i w_i / (k + rank_i(d))``. The §7.5.3 three-channel
+    fusion is unweighted; the weighted form is used by the reranker blend
+    stage (DECISIONS.md).
     """
     if k <= 0:
         raise ValueError(f"rrf k must be positive, got {k}")
+    if weights is not None and len(weights) != len(rank_lists):
+        raise ValueError(
+            f"got {len(weights)} weights for {len(rank_lists)} rank lists"
+        )
     scores: dict[str, float] = {}
-    for ranked in rank_lists:
+    for i, ranked in enumerate(rank_lists):
+        weight = 1.0 if weights is None else weights[i]
         seen: set[str] = set()
         for rank, doc_id in enumerate(ranked, start=1):
             if doc_id in seen:  # ignore duplicates within one list
                 continue
             seen.add(doc_id)
-            scores[doc_id] = scores.get(doc_id, 0.0) + 1.0 / (k + rank)
+            scores[doc_id] = scores.get(doc_id, 0.0) + weight / (k + rank)
     return sorted(scores.items(), key=lambda item: (-item[1], item[0]))

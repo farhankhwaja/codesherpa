@@ -56,3 +56,19 @@ def test_empty_input():
 def test_invalid_k_raises():
     with pytest.raises(ValueError):
         rrf_fuse([["a"]], k=0)
+
+
+def test_weighted_fusion_scales_list_contribution():
+    fused = dict(rrf_fuse([["a"], ["b"]], k=60, weights=[1.0, 4.0]))
+    assert fused["a"] == pytest.approx(1 / 61)
+    assert fused["b"] == pytest.approx(4 / 61)
+
+
+def test_weighted_fusion_default_matches_unweighted():
+    lists = [["a", "b"], ["b", "c"]]
+    assert rrf_fuse(lists, weights=[1.0, 1.0]) == rrf_fuse(lists)
+
+
+def test_weight_count_mismatch_raises():
+    with pytest.raises(ValueError):
+        rrf_fuse([["a"], ["b"]], weights=[1.0])

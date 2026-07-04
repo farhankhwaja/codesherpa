@@ -1,14 +1,14 @@
-"""Shared builder for the Phase 3 eval harness (tests + EVAL_LOG reports).
+"""Shared builder for the Phase 3 INTERNAL eval harness (tests + reports).
 
-Builds a REAL index of the fixture (gitlayer sync -> cAST chunker -> SQLite
-store; symbols/edges test-populated pending Phase 4), embeds with the chosen
-model, and produces comparable reports for hybrid+rerank, hybrid-norerank,
-BM25-only and vector-only over the gold query set.
+Builds a REAL index of the fixture (gitlayer sync -> cAST chunker -> symbol
+graph -> SQLite store; nothing mocked since Phase 4 merged), embeds with the
+chosen model, and produces comparable reports for hybrid+rerank,
+hybrid-norerank, BM25-only and vector-only over the gold query set under
+SYMBOL-AWARE relevance (stricter than the official file-level gate).
 
-NOTE: the §13 quality thresholds are DEFERRED — not asserted anywhere — until
-the hardened gold set lands (human instruction 2026-07-04; see BLOCKED.md and
-DECISIONS D21). The constants stay here, unlowered, for the report display
-and for re-arming the gate.
+The OFFICIAL §13 gate is ``eval/run_eval.py --mode all`` (Phase 4's harness,
+D17 factory contract) — exercised by tests/test_eval_gate.py. The §13
+constants below mirror CLAUDE.md and may never be lowered.
 """
 
 from __future__ import annotations
@@ -29,9 +29,7 @@ GOLD_PATH = ROOT / "eval" / "gold_queries.jsonl"
 EMBED_MODEL = "nomic-ai/nomic-embed-text-v1.5"
 RERANKER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
-# §13 thresholds — mirror CLAUDE.md, may never be lowered. Grading is
-# deferred until the hardened gold set lands (BLOCKED.md); latency gates
-# below are NOT deferred (they do not depend on the gold set's difficulty).
+# §13 thresholds — mirror CLAUDE.md, may never be lowered.
 RECALL5_THRESHOLD = 0.80
 MRR_THRESHOLD = 0.60
 P95_WARM_MS = 500

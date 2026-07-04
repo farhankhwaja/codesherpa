@@ -31,6 +31,7 @@ from repograph.embed.engine import EmbeddingEngine
 from repograph.retrieve.config import RetrievalConfig
 from repograph.retrieve.fusion import rrf_fuse
 from repograph.retrieve.pack import pack_results
+from repograph.retrieve.passages import focus_passage, query_terms
 from repograph.retrieve.rerank import CrossEncoderReranker
 from repograph.retrieve.router import extract_identifier_tokens, split_identifier
 from repograph.retrieve.tokens import result_token_cost
@@ -196,18 +197,51 @@ class HybridRetriever(Retriever):
                 return RetrievalSource.BM25
             return RetrievalSource.VECTOR
 
-        # -- cross-encoder rerank of fused top N (toggleable)
-        top = fused[: cfg.rerank_top]
+        # -- cross-encoder rerank (toggleable). Candidates are the UNION of
+        # each channel's head plus fused order (fused-only selection lets a
+        # BM25 stopword flood push a vector-rank-4 chunk beyond the CE
+        # window). Passages are query-focused windows, not head-truncations:
+        # cAST chunks are often whole files and the relevant code may sit
+        # past the CE char cap. By default the CE ordering is rank-fused
+        # with the vector ordering instead of overwriting it (DECISIONS.md).
         scores: dict[str, float]
-        if cfg.rerank_enabled and self._reranker is not None and top:
+        if cfg.rerank_enabled and self._reranker is not None and fused:
+            pool: list[str] = []
+            head = cfg.rerank_channel_head
+            for cid in (
+                vector[:head]
+                + bm25[:head]
+                + symbol_ids[: max(1, head // 2)]
+                + [cid for cid, _ in fused]
+            ):
+                if cid not in pool:
+                    pool.append(cid)
+                if len(pool) >= cfg.rerank_top:
+                    break
+
+            terms = query_terms(query)
             passages = []
-            for cid, _ in top:
+            for cid in pool:
                 chunk = self._store.get_chunk(cid)
                 if chunk is not None:
-                    passages.append((cid, f"{chunk.breadcrumb}\n{chunk.code}"))
-            scores = dict(self._reranker.rerank(query, passages))
+                    passage = focus_passage(
+                        terms, chunk.breadcrumb, chunk.code, cfg.rerank_max_chars
+                    )
+                    passages.append((cid, passage))
+            ce_scored = self._reranker.rerank(query, passages)
+            if cfg.rerank_blend_vector:
+                ce_ranked = [cid for cid, _ in ce_scored]
+                blended = rrf_fuse(
+                    [ce_ranked, vector],
+                    k=cfg.rrf_k,
+                    weights=[1.0, cfg.rerank_blend_vector_weight],
+                )
+                in_pool = set(pool)
+                scores = {cid: s for cid, s in blended if cid in in_pool}
+            else:
+                scores = dict(ce_scored)
         else:
-            scores = dict(top)
+            scores = dict(fused[: cfg.rerank_top])
 
         candidates: list[SearchResult] = []
         chunk_by_id: dict[str, Chunk] = {}

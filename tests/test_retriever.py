@@ -141,8 +141,10 @@ def scenario(tmp_path):
     store.close()
 
 
-def make_retriever(store, *, rerank=False, expansion=True, scorer=None):
-    config = RetrievalConfig(rerank_enabled=rerank, expansion_enabled=expansion)
+def make_retriever(store, *, rerank=False, expansion=True, scorer=None, blend=True):
+    config = RetrievalConfig(
+        rerank_enabled=rerank, expansion_enabled=expansion, rerank_blend_vector=blend
+    )
     encoder = StubEncoder()
     embedder = EmbeddingEngine(store, "stub-model", encoder=encoder)
     # pre-embed the corpus (mirrors indexing)
@@ -237,15 +239,77 @@ class TestHybridPath:
         assert called == []
 
     def test_rerank_enabled_reorders(self, scenario):
+        """Pure-CE mode (blend off): the cross-encoder fully controls order."""
         store, chunks = scenario
 
         def scorer(pairs):
             # rank backoff_delay above everything else
             return [10.0 if "backoff_delay" in text else -10.0 for _, text in pairs]
 
-        retriever, _ = make_retriever(store, rerank=True, expansion=False, scorer=scorer)
+        retriever, _ = make_retriever(
+            store, rerank=True, expansion=False, scorer=scorer, blend=False
+        )
         packed = retriever.search("where is the retry logic for http requests")
         assert packed.results[0].chunk.chunk_id == chunks["backoff"].chunk_id
+
+    def test_rerank_blend_keeps_vector_strong_chunk(self, scenario):
+        """Default blended mode: a chunk the embedder loves survives a CE
+        demotion (rank fusion of CE order with vector order)."""
+        store, chunks = scenario
+
+        def scorer(pairs):
+            # CE hates the retry chunk, loves an unrelated one
+            return [
+                -10.0 if "retry_request" in text else 10.0 for _, text in pairs
+            ]
+
+        retriever, _ = make_retriever(
+            store, rerank=True, expansion=False, scorer=scorer, blend=True
+        )
+        packed = retriever.search("where is the retry logic for http requests")
+        top3 = [r.chunk.chunk_id for r in packed.results[:3]]
+        assert chunks["retry"].chunk_id in top3, (
+            "vector-top chunk must not be buried by a hostile CE in blend mode"
+        )
+
+    def test_rerank_pool_includes_vector_head_beyond_fused_window(self, tmp_path):
+        """A chunk at vector rank 1 that BM25 never matches must still reach
+        the CE pool even with a tiny rerank_top (the union-pool guarantee)."""
+        store, chunks = build_store(tmp_path / "pool.db")
+        try:
+            seen = []
+
+            def scorer(pairs):
+                seen.extend(passage for _, passage in pairs)
+                return [0.0] * len(pairs)
+
+            config = RetrievalConfig(
+                rerank_enabled=True, expansion_enabled=False, rerank_top=2,
+                rerank_channel_head=2,
+            )
+            encoder = StubEncoder()
+            embedder = EmbeddingEngine(store, "stub-model", encoder=encoder)
+            all_chunks = []
+            for blob in (BLOB_HTTP, BLOB_ROUTES, BLOB_API):
+                all_chunks.extend(store.chunks_for_blob(blob))
+            embedder.embed_chunks(all_chunks)
+            retriever = HybridRetriever(
+                store, embedder, config=config,
+                reranker=CrossEncoderReranker("stub", scorer=scorer),
+            )
+            # bag-of-words stub: only the retry chunk shares 'backoff' via code
+            retriever.search("backoff retries pauses growing exponentially")
+            assert seen, "reranker saw no candidates"
+            # vector head is in the CE pool regardless of the fused window
+            vec_top = store.vector_search(
+                embedder.embed_query("backoff retries pauses growing exponentially"), 1
+            )[0][0]
+            top_chunk = store.get_chunk(vec_top)
+            assert any(top_chunk.breadcrumb in passage for passage in seen), (
+                "vector-rank-1 chunk never reached the cross-encoder"
+            )
+        finally:
+            store.close()
 
     def test_expansion_adds_discounted_neighbors(self, scenario):
         store, chunks = scenario

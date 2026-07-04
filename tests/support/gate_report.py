@@ -1,5 +1,5 @@
-"""Print the Phase 3 eval table (PRELIMINARY until the hardened gold set
-lands — see BLOCKED.md; numbers go to EVAL_LOG.md marked PRELIMINARY).
+"""Print the Phase 3 INTERNAL eval table (symbol-aware relevance) for
+EVAL_LOG.md. The official gate is ``eval/run_eval.py --mode all``.
 
 Run:  .venv/bin/python tests/support/gate_report.py [embed_model] [reranker_model]
 """
