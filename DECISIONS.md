@@ -505,3 +505,40 @@ greps for both stale module refs and nested artifacts.
 (d) Local model cache moved (`mv ~/.cache/repograph ~/.cache/sherpa`), no
 re-download. Suite green in-tree after each stage and from a clean
 checkout (verified before merge).
+
+## D38 — Embedding memory blowup on single-line mega-chunks (Phase 6 hardening finding)
+Found dogfooding the ship flow: `sherpa sync` on a clone of THIS repo hung
+with runaway memory (14–17 GB RSS, 61 min CPU; reproduced twice, killed by
+the human). Diagnosis chain, with an isolated guarded repro:
+(1) The repo's committed A/B transcript files (verification/ab/fixture/
+*.stream.jsonl) are single-line files of 54–288 KB — under the 2 MiB
+whole-file guard, not in any junk dir, so correctly indexed. (2) The
+line-window fallback chunker had NO byte cap: a single-line file is one
+window, so one 287 KB chunk. (3) The embedder's tokenizer truncates each
+text to the model's max_seq_len (8192 for nomic) — ONE mega-chunk encodes
+fine (measured 4.6 s / 1.8 GB RSS) — but sentence-transformers sorts by
+length, so ALL the mega-chunks land in the same batch of 32; attention
+memory is batch × heads × seq², measured 2.6 GB at batch 2 and extrapolating
+to ~25 GB at batch 32 — the observed pathology. The ignore rules were NOT at
+fault (sync itself: 142 files in 0.25 s; .venv untracked and also in
+SKIP_DIR_COMPONENTS).
+Fixes, each with a regression test:
+(a) fallback chunker: hard `MAX_CHUNK_BYTES = 16384` — oversized windows are
+split into contiguous byte slices (single-line 2 MB file → capped chunks,
+full coverage, deterministic);
+(b) engine: `ENCODER_MAX_CHARS = 8192` head-truncation of every text fed to
+the encoder (chunk text AND query) — the engine-level bound that holds for
+any input; no legitimate cAST chunk comes near it, so no cached vector
+changes (no embed-tag bump);
+(c) `.cache` added to SKIP_DIR_COMPONENTS (the one junk dir missing —
+.venv/venv/node_modules/dist/build were already there);
+(d) `sherpa sync` prints `indexing files done/total` progress (non-quiet,
+>20 files) so long first syncs are distinguishable from hangs;
+(e) batches already stream to the DB per batch (warm.embed_index →
+engine.embed_chunks writes each vector immediately); RAM was transformer
+activations, not accumulation — documented, not changed.
+Related cleanup found during the same investigation: the rename sed turned
+.gitignore's `.repograph/` into `.sherpa/`, so the legacy `.repograph/`
+index dir became unignored and the rename commit accidentally tracked
+7.5 MB+ of index binaries. Removed from tracking; `.repograph/` re-ignored
+permanently; `sherpa init` now warns when a legacy `.repograph/` dir exists.

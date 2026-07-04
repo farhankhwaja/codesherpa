@@ -51,6 +51,16 @@ _MODEL_PREFIXES: dict[str, tuple[str, str]] = {
 Encoder = Callable[[list[str]], list[list[float]]]
 """Batch text -> vectors. Injected in tests; real one wraps SentenceTransformer."""
 
+ENCODER_MAX_CHARS = 8192
+"""Hard cap on characters fed to the encoder per text (~2k BPE tokens).
+
+The tokenizer already truncates each text to the model's max_seq_len, but a
+length-sorted batch of near-max-length texts costs attention memory of
+batch x heads x seq^2 — measured >14 GB RSS on CPU when 287 KB single-line
+chunks reached a batch of 32 (D38). Chunkers bound chunk size too; this cap
+is the engine-level guarantee that holds for ANY input. All legitimate cAST
+chunks are far below it, so no cached vector changes."""
+
 
 def _normalize(vector: Sequence[float]) -> list[float]:
     norm = math.sqrt(sum(v * v for v in vector))
@@ -122,8 +132,9 @@ class EmbeddingEngine:
 
     @staticmethod
     def chunk_text(chunk: Chunk) -> str:
-        """The exact text embedded for a chunk: breadcrumb + newline + code."""
-        return f"{chunk.breadcrumb}\n{chunk.code}"
+        """The exact text embedded for a chunk: breadcrumb + newline + code,
+        head-truncated to :data:`ENCODER_MAX_CHARS` (memory bound, D38)."""
+        return f"{chunk.breadcrumb}\n{chunk.code}"[:ENCODER_MAX_CHARS]
 
     # ------------------------------------------------------------------ embed
 
@@ -167,5 +178,5 @@ class EmbeddingEngine:
         """Normalized embedding for a search query (never cached)."""
         encode = self._load_encoder()
         _, query_prefix = self._prefixes()
-        vectors = encode([query_prefix + query])
+        vectors = encode([(query_prefix + query)[:ENCODER_MAX_CHARS]])
         return _normalize(vectors[0])
