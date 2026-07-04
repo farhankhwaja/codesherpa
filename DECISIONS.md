@@ -68,3 +68,27 @@ is unaffected and Phase 3 measures latency).
 "generated" that works before reading the blob (5 MB bundled JS attack in the
 verifier's playbook). 2 MiB is far above any hand-written source file.
 Configurable later if a real repo proves otherwise.
+
+## D10 — tree-sitter-language-pack ≥1.12: use get_language(), not get_parser() (Phase 2)
+`tslp.get_parser()` now returns a Rust-backed parser with a different API
+(`parse(str)`, `root_node` as a method). Only
+`tree_sitter.Parser(tslp.get_language(name))` yields the documented Python
+API (bytes in, `Node.start_byte/end_byte/children/child_by_field_name`).
+Verified by introspection against installed tree-sitter 0.26.0 /
+language-pack 1.12.2. Deps added per §6: tree-sitter,
+tree-sitter-language-pack.
+
+## D11 — cAST merge is one flat greedy pass over the piece sequence (Phase 2)
+After recursive splitting, pieces are merged left-to-right while the combined
+non-whitespace size stays ≤ max_chunk (sizes are additive across contiguous
+extents, so merging is O(n)). Merging deliberately crosses recursion
+boundaries: when a class is split, its tiny header tokens (`class Foo:`) must
+merge with the first method pieces or they would become absurd standalone
+chunks. Consequence: a small trailing method may share a chunk with the next
+top-level sibling — acceptable per §7.2's "greedily merge adjacent small
+sibling chunks" and byte-exactness is preserved either way.
+
+## D12 — Python docstrings may be bare `string` nodes (Phase 2)
+The bundled tree-sitter-python grammar yields a def/class docstring as a bare
+`string` first child of `block` (not wrapped in `expression_statement` as in
+some grammar versions). Breadcrumb extraction handles both shapes.

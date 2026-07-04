@@ -1,16 +1,17 @@
 """Chunker entry point: language detection + strategy dispatch.
 
-Phase 1 routes everything through the line-window fallback. Phase 2 adds the
-cAST (tree-sitter split-then-merge) path for Python/TypeScript/JavaScript/TSX;
-adding a language after that should mean adding a tree-sitter queries file,
-nothing else. Any parse failure must fall back to line windows — the indexer
-never crashes on a weird file.
+Python/TypeScript/JavaScript/TSX go through the cAST (tree-sitter
+split-then-merge) chunker; adding a language means adding one entry to
+``chunker.languages.LANGUAGES``. Everything else — and any file that fails to
+parse — uses the line-window fallback: the indexer never crashes on a weird
+file.
 """
 
 from __future__ import annotations
 
 from pathlib import PurePosixPath
 
+from repograph.chunker.cast import chunk_ast
 from repograph.chunker.fallback import chunk_lines
 from repograph.contracts.types import Chunk
 
@@ -41,5 +42,7 @@ def chunk_blob(
 ) -> list[Chunk]:
     """Chunk one blob deterministically: same blob -> same chunks, always."""
     lang = language if language is not None else detect_language(file_path)
-    # Phase 2 will insert the cAST path here for the four parsed languages.
+    chunks = chunk_ast(blob_hash, data, file_path, lang)
+    if chunks is not None:
+        return chunks
     return chunk_lines(blob_hash, data, file_path, lang)
