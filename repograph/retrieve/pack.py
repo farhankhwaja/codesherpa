@@ -24,11 +24,14 @@ def pack_results(
 ) -> PackedContext:
     """Pack scored candidates into a :class:`PackedContext` under the budget.
 
-    Candidates are considered in descending ``score / token_count`` density
-    (ties: higher score, then chunk id, for determinism). A candidate is
-    skipped when it would exceed the remaining budget, when its byte range
-    overlaps an already-packed chunk of the same blob, or when a chunk with
-    the same breadcrumb (same symbol) is already packed.
+    Candidates are *selected* in descending ``score / token_count`` density
+    (ties: higher score, then chunk id, for determinism) so the budget is
+    filled with maximum total usefulness. A candidate is skipped when it
+    would exceed the remaining budget, when its byte range overlaps an
+    already-packed chunk of the same blob, or when a chunk with the same
+    breadcrumb (same symbol) is already packed. The selected results are
+    *returned* ordered by descending score — that is the usefulness order a
+    calling agent reads top-down.
     """
     if budget_tokens < 0:
         raise ValueError(f"budget_tokens must be >= 0, got {budget_tokens}")
@@ -57,6 +60,7 @@ def pack_results(
         seen_breadcrumbs.add(cand.chunk.breadcrumb)
         total += cost
 
+    packed.sort(key=lambda r: (-r.score, r.chunk.chunk_id))
     return PackedContext(
         query=query,
         budget_tokens=budget_tokens,
