@@ -30,10 +30,16 @@ class RetrievalConfig:
 
     # cross-encoder rerank
     rerank_enabled: bool = True
-    rerank_top: int = 50
+    rerank_top: int = 30
+    """§7.5 nominally reranks the fused top 50, but CE forward passes dominate
+    warm latency on CPU (fused-top-50 at 1200 chars measured p95 ≈ 750 ms vs
+    the §13 gate of < 500 ms). Depth 30 + 1000-char passages meet the gate
+    with identical gold-set quality — §15 spirit clause, see DECISIONS.md."""
     reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
-    rerank_max_chars: int = 2000
-    """Per-passage character cap fed to the cross-encoder (latency guard)."""
+    rerank_max_chars: int = 1000
+    """Per-passage character cap fed to the cross-encoder. Sequence length
+    dominates CE cost on CPU; the breadcrumb + opening lines carry most of
+    the relevance signal."""
 
     # 1-hop graph expansion
     expansion_enabled: bool = True
@@ -43,8 +49,12 @@ class RetrievalConfig:
     # budget packing
     default_budget_tokens: int = 4000
 
-    # embeddings
-    embed_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    # embeddings — winner of the Phase 3 fixture benchmark (DECISIONS.md):
+    # nomic vec recall@5 1.00 / MRR 0.867 vs MiniLM 0.92 / 0.831; jina scored
+    # 1.00 / 0.890 but cannot load under transformers>=5 (disqualified).
+    embed_model: str = "nomic-ai/nomic-embed-text-v1.5"
     embed_batch_size: int = 32
+    embed_trust_remote_code: bool = True
+    """nomic-embed ships custom modeling code; required by the default model."""
 
     model_cache_dir: Path = field(default_factory=default_cache_dir)

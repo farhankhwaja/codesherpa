@@ -46,12 +46,15 @@ class CrossEncoderReranker:
 
             model = CrossEncoder(
                 self.model_name,
-                cache_dir=str(self._cache_dir),
+                cache_folder=str(self._cache_dir),
                 device="cpu",
             )
 
             def score(pairs: list[tuple[str, str]]) -> list[float]:
-                return [float(s) for s in model.predict(pairs, show_progress_bar=False)]
+                return [
+                    float(s)
+                    for s in model.predict(pairs, batch_size=64, show_progress_bar=False)
+                ]
 
             self._scorer = score
         return self._scorer

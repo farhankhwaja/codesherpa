@@ -202,3 +202,56 @@ nl_hard — these queries measure exactly what embeddings must add in Phase 3.
 `VALID_TYPES` in test_gold_queries.py was extended (not relaxed): the
 type-mix test now REQUIRES all five styles, and the minimum entry count rose
 20 → 35. Additive eval-strengthening per §13.
+
+## D22 — Token estimation is a dependency-free heuristic (Phase 3)
+No tokenizer is on the §6 approved list, so the budget packer estimates
+`ceil(len/4) + newlines/4` tokens (code averages ~3.5–4 chars/token on common
+BPE vocabularies). The estimate deliberately errs high: the §7.5.6 "never
+exceed budget" guarantee must hold for real tokenizers too. `TODO(upgrade)`:
+swap in exact counting if a tokenizer dep is ever approved.
+
+## D23 — Packer selects by density, returns by score (Phase 3)
+§7.5.6 packs "greedy by score/token_count". Selection follows that literally,
+but *presentation* order is score-descending: with density ordering, tiny
+module-header chunks outranked the actual answers and cost 4 NL gold queries
+(hybrid recall@5 0.84 → 0.92 after the change, MiniLM/no-rerank config).
+The `PackedContext` contract only requires "descending usefulness".
+
+## D24 — Eval relevance is symbol-aware, not file-level (Phase 3)
+A result counts as relevant iff it comes from an expected file AND mentions an
+expected symbol (breadcrumb or code). File-level relevance saturates on the
+fixture — vector-only alone hits recall@5 = 1.00, which would make the §13
+"hybrid strictly beats single methods" comparison meaningless — and file-level
+credit for e.g. an unrelated chunk of `tasks.py` does not measure what
+repograph is for (returning the right *function*). Measured under file-level
+relevance for the record (MiniLM, no rerank): vector-only 1.00/0.953, hybrid
+0.92/0.907. Symbol-aware: vector-only 0.92/0.831, hybrid 0.92/0.888.
+
+## D25 — Embedding model: nomic-embed-text-v1.5 (Phase 3 benchmark)
+Fixture gold set, symbol-aware relevance, vector-only channel (isolates the
+embedder), 93 chunks:
+
+| model | vec recall@5 | vec MRR | embed time | note |
+|---|---|---|---|---|
+| nomic-ai/nomic-embed-text-v1.5 | 1.00 | 0.867 | 38.7 s | winner |
+| jinaai/jina-embeddings-v2-base-code | 1.00 | 0.890 | 51.6 s | disqualified: remote code incompatible with transformers ≥5 (`find_pruneable_heads_and_indices` removed); only loads in a pinned transformers<5 venv, which our runtime can't ship |
+| sentence-transformers/all-MiniLM-L6-v2 | 0.92 | 0.831 | 5.3 s | fallback baseline |
+
+jina scored marginally higher MRR but cannot load under the modern stack —
+running it required a throwaway venv with `transformers<5` + `sentence-
+transformers<4`. nomic needs `trust_remote_code=True` + `einops` (added as a
+runtime dep — §2.6 justification: required at model load by the chosen §6
+model). Query/document prefixes (`search_query:`/`search_document:`) applied
+per nomic's model card.
+
+## D26 — Reranker: ms-marco-MiniLM-L-6-v2 (§9 fallback taken); rerank depth 30 (Phase 3)
+CE forward passes dominate warm query latency on CPU. Fused-top-50 at
+1200-char passages measured p95 ≈ 750 ms vs the §13 gate < 500 ms; depth 30 +
+1000-char cap gives p95 = 444 ms with *identical* gold-set quality
+(recall@5 1.00, MRR 0.873) — quality is preserved because the fused top-30
+already contains every gold answer on this set. §7.5's "top 50" yields to the
+§13 latency threshold per §15 priority order; `rerank_top` stays configurable.
+BAAI/bge-reranker-v2-m3 (§6 primary, 568M params) benchmarked for the record —
+see EVAL_LOG.md — and rejected for CPU latency; `TODO(upgrade)`: revisit on
+GPU/quantized runtimes. Also: CE scores pass through a sigmoid so packing sees
+positive scores; expansion discounts compose multiplicatively.

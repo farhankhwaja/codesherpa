@@ -70,3 +70,40 @@ embeddings must close.
 
 Golden Test with symbols+edges projections: default run green; GOLDEN_DEEP=1
 soak green (25/25 randomized examples, this workstation).
+
+## 2026-07-04 — Phase 3 (retrieval worktree, pre-integration) — commit: (this commit)
+
+Setup: miniproject fixture indexed by the test-support indexer (93 chunks, 31
+blobs, 114 symbols, 213 edges) into the in-memory contract store; real models,
+CPU-only, Apple M-series. Relevance is symbol-aware (DECISIONS D24). 25 gold
+queries. Integration re-run against the real store is required before merge.
+
+### Embedding model benchmark (vector-only channel, DECISIONS D25)
+| model | recall@5 | MRR | embed 93 chunks |
+|---|---|---|---|
+| nomic-embed-text-v1.5 (winner) | 1.00 | 0.867 | 38.7 s |
+| jina-embeddings-v2-base-code (disqualified: transformers≥5 incompat) | 1.00 | 0.890 | 51.6 s |
+| all-MiniLM-L6-v2 (fallback) | 0.92 | 0.831 | 5.3 s |
+
+### Phase 3 eval gate (embed=nomic, reranker=ms-marco-MiniLM-L-6-v2, rerank_top=30, 1000-char passages)
+| method | recall@5 | MRR | p95 warm |
+|---|---|---|---|
+| hybrid+rerank | 1.00 | 0.873 | 444 ms |
+| hybrid-norerank | 0.96 | 0.905 | 29 ms |
+| bm25-only | 0.96 | 0.745 | 3 ms |
+| vector-only | 1.00 | 0.867 | 29 ms |
+
+- recall@5 = 1.00 ≥ 0.80 ✓; MRR = 0.873 ≥ 0.60 ✓
+- hybrid+rerank > bm25-only on recall@5 (1.00 > 0.96) ✓
+- hybrid+rerank vs vector-only: 1.00 = 1.00 — **tie at ceiling; strict > is
+  structurally impossible on this gold set** (see BLOCKED.md; needs harder
+  gold queries, eval/ is graph-mcp-owned)
+- p95 warm (reranker on) 444 ms < 500 ms ✓ (was 758 ms at depth 50/1200 chars)
+- router path (symbol + stacktrace queries) p95 ≈ 0–1 ms < 200 ms ✓
+- embedding cache: re-embed of unchanged fixture computes 0 new embeddings ✓
+
+### Reranker comparison (same pipeline, gold set)
+| reranker | recall@5 | MRR | p95 warm |
+|---|---|---|---|
+| ms-marco-MiniLM-L-6-v2 (chosen) | 1.00 | 0.873 | 444 ms |
+| bge-reranker-v2-m3 (§6 primary) | (pending — appended below when the 2.3 GB run completes) | | |
