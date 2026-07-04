@@ -12,20 +12,27 @@ from repograph.graph.recent import recent_changes
 def test_since_ref_returns_newest_first(miniproject: Path):
     commits = recent_changes(miniproject, "HEAD~2")
     assert len(commits) == 2
-    assert commits[0].message == "feat: password hashing and session tokens"
-    assert commits[1].message == "feat: webhook notifications, user cache, cli; drop legacy sync"
+    assert commits[0].message == "chore: nightly task export script (node)"
+    assert commits[1].message == "feat: password hashing and session tokens"
     assert commits[0].date > commits[1].date
 
 
 def test_since_iso_date(miniproject: Path):
-    commits = recent_changes(miniproject, "2024-01-06")
-    assert [c.message for c in commits] == ["feat: password hashing and session tokens"]
-    # a date before all history returns everything (6 fixture commits)
-    assert len(recent_changes(miniproject, "2024-01-01")) == 6
+    commits = recent_changes(miniproject, "2024-01-07")
+    assert [c.message for c in commits] == ["chore: nightly task export script (node)"]
+    # a date before all history returns everything (7 fixture-v2 commits)
+    assert len(recent_changes(miniproject, "2024-01-01")) == 7
+
+
+def test_new_js_file_symbols_are_added(miniproject: Path):
+    latest = recent_changes(miniproject, "HEAD~1")[0]
+    assert latest.files == ("webclient/scripts/export_tasks.js",)
+    changes = {(s.path, s.symbol): s.change for s in latest.symbols}
+    assert changes[("webclient/scripts/export_tasks.js", "formatTaskRow")] == "added"
 
 
 def test_symbol_level_diffing(miniproject: Path):
-    latest = recent_changes(miniproject, "HEAD~1")[0]
+    latest = recent_changes(miniproject, "HEAD~2")[1]
     assert set(latest.files) == {
         "pyserver/auth.py",
         "pyserver/routes/users.py",
@@ -44,8 +51,8 @@ def test_symbol_level_diffing(miniproject: Path):
 
 
 def test_deleted_file_symbols_are_removed(miniproject: Path):
-    commits = recent_changes(miniproject, "HEAD~2")
-    services = commits[1]
+    commits = recent_changes(miniproject, "HEAD~3")
+    services = commits[2]
     changes = {(s.path, s.symbol): s.change for s in services.symbols}
     assert changes[("pyserver/legacy.py", "old_sync_tasks")] == "removed"
 
@@ -60,6 +67,6 @@ def test_unknown_ref_raises_value_error(miniproject: Path):
 
 
 def test_to_dict_is_compact(miniproject: Path):
-    payload = recent_changes(miniproject, "HEAD~1")[0].to_dict()
+    payload = recent_changes(miniproject, "HEAD~2")[1].to_dict()
     assert payload["sha"] == payload["sha"][:12]
     assert {"sha", "date", "author", "message", "files", "changed_symbols"} == set(payload)

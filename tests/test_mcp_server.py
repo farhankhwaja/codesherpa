@@ -115,9 +115,9 @@ def test_get_references(server):
 
 
 def test_get_recent_changes(server):
-    payload = _payload(_call(server, "get_recent_changes", {"since": "HEAD~1"}))
-    assert len(payload["commits"]) == 1
-    commit = payload["commits"][0]
+    payload = _payload(_call(server, "get_recent_changes", {"since": "HEAD~2"}))
+    assert len(payload["commits"]) == 2
+    commit = payload["commits"][1]  # the auth commit (fixture v2 adds a 7th)
     assert "pyserver/auth.py" in commit["files"]
     changed = {(s["path"], s["symbol"]): s["change"] for s in commit["changed_symbols"]}
     assert changed[("pyserver/auth.py", "hash_password")] == "added"
