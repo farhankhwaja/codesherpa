@@ -11,8 +11,11 @@ requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "repograph contributors" }]
 # NOTE: runtime dependencies are added per phase, when first used, strictly
-# from the approved stack in CLAUDE.md §6. Phase 0 needs stdlib only.
-dependencies = []
+# from the approved stack in CLAUDE.md §6.
+dependencies = [
+    "pygit2>=1.15",     # §6 git access (Phase 1)
+    "sqlite-vec>=0.1",  # §6 storage: vector index (Phase 1 schema, Phase 3 use)
+]
 
 [project.optional-dependencies]
 dev = [
