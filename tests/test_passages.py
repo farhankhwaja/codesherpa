@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from repograph.retrieve.passages import focus_passage, query_terms
+from codesherpa.retrieve.passages import focus_passage, query_terms
 
 
 class TestQueryTerms:

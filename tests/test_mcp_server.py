@@ -23,11 +23,11 @@ import pytest
 from mcp import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
 from mcp.shared.memory import create_connected_server_and_client_session
-from repograph.graph.gitio import last_change_dates
-from repograph.graph.textutil import estimate_tokens
-from repograph.graph.view import SymbolGraph
-from repograph.mcp_server import create_server
-from repograph.store.sqlite_store import SQLiteIndexStore
+from codesherpa.graph.gitio import last_change_dates
+from codesherpa.graph.textutil import estimate_tokens
+from codesherpa.graph.view import SymbolGraph
+from codesherpa.mcp_server import create_server
+from codesherpa.store.sqlite_store import SQLiteIndexStore
 from simple_retriever import SimpleRetriever
 
 EXPECTED_TOOLS = {

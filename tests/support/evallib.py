@@ -9,7 +9,7 @@ one of the query's expected_files AND mentions one of the expected_symbols
 (in breadcrumb or code). File-only relevance saturates on the fixture
 (vector-only reaches recall@5 = 1.00), which would make the "hybrid strictly
 beats single methods" gate meaningless; symbol-aware relevance measures what
-repograph is actually for — returning the right *function*, not just the
+sherpa is actually for — returning the right *function*, not just the
 right file. See DECISIONS.md.
 
 Ranks are 1-based positions in the returned result order (what a calling

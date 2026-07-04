@@ -58,12 +58,12 @@ def synced_miniproject(
     Session-scoped and shared — treat the store as read-only; tests that
     mutate index state must sync their own clone. (Phase 4 addition.)
     """
-    from repograph.gitlayer.sync import sync
+    from codesherpa.gitlayer.sync import sync
 
     tmp = tmp_path_factory.mktemp("synced-miniproject")
     repo = tmp / "repo"
     shutil.copytree(miniproject, repo)
-    shutil.rmtree(repo / ".repograph", ignore_errors=True)
+    shutil.rmtree(repo / ".sherpa", ignore_errors=True)
     db = tmp / "index.db"
     sync(repo, db)
     return repo, db

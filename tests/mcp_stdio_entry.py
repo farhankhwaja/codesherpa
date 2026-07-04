@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Test-only stdio entry: run the repograph MCP server over a synced index.
+"""Test-only stdio entry: run the sherpa MCP server over a synced index.
 
 Usage: python tests/mcp_stdio_entry.py <repo_path> <db_path>
 
 Launched as a subprocess by tests/test_mcp_server.py so the SDK client talks
 to the server over the REAL stdio transport. Uses the tests-only
 SimpleRetriever until the Phase 3 pipeline provides the production wiring
-(`repograph.retrieve.build_retriever` -> `repograph serve`).
+(`codesherpa.retrieve.build_retriever` -> `sherpa serve`).
 """
 
 from __future__ import annotations
@@ -18,10 +18,10 @@ sys.path.insert(0, str(Path(__file__).parent))  # for simple_retriever
 
 from simple_retriever import SimpleRetriever
 
-from repograph.graph.gitio import last_change_dates
-from repograph.graph.view import SymbolGraph
-from repograph.mcp_server import create_server
-from repograph.store.sqlite_store import SQLiteIndexStore
+from codesherpa.graph.gitio import last_change_dates
+from codesherpa.graph.view import SymbolGraph
+from codesherpa.mcp_server import create_server
+from codesherpa.store.sqlite_store import SQLiteIndexStore
 
 
 def main() -> int:

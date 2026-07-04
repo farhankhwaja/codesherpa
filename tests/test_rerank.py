@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from repograph.retrieve.rerank import CrossEncoderReranker
+from codesherpa.retrieve.rerank import CrossEncoderReranker
 
 
 def make_reranker(scores_by_text):

@@ -1,7 +1,7 @@
 # A/B Token Benchmark Protocol (executed in Phase 5)
 
 Goal (CLAUDE.md §10 Phase 5, §13): show **≥ 50 % token reduction on solved
-tasks with no drop in solve rate** when Claude Code has the repograph MCP
+tasks with no drop in solve rate** when Claude Code has the sherpa MCP
 server vs. plain file tools. Record whatever the real numbers are in
 `EVAL_LOG.md` — never cherry-pick.
 
@@ -9,12 +9,12 @@ server vs. plain file tools. Record whatever the real numbers are in
 
 - Two repos: `tests/fixtures/miniproject` (built by
   `tests/fixtures/build_miniproject.py`) and one real mid-size external repo
-  (e.g. `pallets/flask`), both indexed with `repograph init`.
+  (e.g. `pallets/flask`), both indexed with `sherpa init`.
 - Two Claude Code configurations, identical model and settings otherwise:
-  - **A (control):** no repograph; agent may use its normal tools
+  - **A (control):** no sherpa; agent may use its normal tools
     (grep/glob/read).
-  - **B (treatment):** repograph MCP server attached via
-    `claude mcp add repograph -- python -m repograph.mcp_server <repo>`;
+  - **B (treatment):** sherpa MCP server attached via
+    `claude mcp add sherpa -- python -m codesherpa.mcp_server <repo>`;
     same normal tools still available (we measure *choice* too).
 - Fresh session per task per arm (no context reuse). Same task prompt,
   verbatim, in both arms.
@@ -40,7 +40,7 @@ an arm "solves" a task if its final answer names the key file(s)+symbol(s).
 | solved | final answer matches the solution key (graded by a human or a fresh judge session shown only key + answer) |
 | tool_calls | count of tool invocations in the transcript |
 | file_reads | count of whole-file reads (Read tool) |
-| fallback_rate (arm B) | fraction of tasks where the agent fell back to grep/read after trying repograph tools |
+| fallback_rate (arm B) | fraction of tasks where the agent fell back to grep/read after trying sherpa tools |
 
 ## Reporting
 

@@ -6,8 +6,8 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from repograph.contracts.types import RetrievalSource
-from repograph.retrieve.pack import pack_results
+from codesherpa.contracts.types import RetrievalSource
+from codesherpa.retrieve.pack import pack_results
 from tests.support.factories import make_chunk, make_result
 
 

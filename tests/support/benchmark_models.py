@@ -20,9 +20,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from repograph.embed.engine import EmbeddingEngine  # noqa: E402
-from repograph.retrieve.config import RetrievalConfig  # noqa: E402
-from repograph.retrieve.retriever import HybridRetriever  # noqa: E402
+from codesherpa.embed.engine import EmbeddingEngine  # noqa: E402
+from codesherpa.retrieve.config import RetrievalConfig  # noqa: E402
+from codesherpa.retrieve.retriever import HybridRetriever  # noqa: E402
 from tests.support.evallib import evaluate, load_gold_queries  # noqa: E402
 from tests.support.realstore import build_real_index  # noqa: E402
 

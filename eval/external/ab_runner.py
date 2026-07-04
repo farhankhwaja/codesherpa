@@ -4,8 +4,8 @@
 Runs each task from a task file through headless Claude Code (`claude -p`)
 in one of two arms:
 
-  A (control):   normal tools only (Read/Grep/Glob; no repograph)
-  B (treatment): same + the repograph MCP server attached via --mcp-config
+  A (control):   normal tools only (Read/Grep/Glob; no sherpa)
+  B (treatment): same + the sherpa MCP server attached via --mcp-config
 
 The agent sees ONLY the task text — ground-truth HTML comments are stripped
 here, before the prompt is built (amendment 2b). One fresh session per task
@@ -83,10 +83,10 @@ def run_task(
     if arm == "B":
         assert mcp_config is not None
         # headless MCP tools need an explicit allow; this only grants the
-        # repograph server's tools — arm A has no analogous restriction lifted
+        # sherpa server's tools — arm A has no analogous restriction lifted
         cmd += [
             "--mcp-config", str(mcp_config), "--strict-mcp-config",
-            "--allowedTools", "mcp__repograph",
+            "--allowedTools", "mcp__sherpa",
         ]
 
     started = time.perf_counter()
@@ -123,7 +123,7 @@ def run_task(
                 if block.get("type") == "tool_use":
                     name = block.get("name", "")
                     tool_calls += 1
-                    if name.startswith("mcp__repograph__"):
+                    if name.startswith("mcp__sherpa__"):
                         mcp_calls += 1
                         saw_mcp = True
                     elif name == "Read":
@@ -176,7 +176,7 @@ def main() -> int:
     parser.add_argument("--model", default="sonnet")
     parser.add_argument("--max-turns", type=int, default=40)
     parser.add_argument("--serve-python", default=sys.executable,
-                        help="Python used to launch the repograph MCP server (arm B).")
+                        help="Python used to launch the sherpa MCP server (arm B).")
     parser.add_argument("--only", nargs="*", default=None)
     args = parser.parse_args()
 
@@ -194,9 +194,9 @@ def main() -> int:
             json.dumps(
                 {
                     "mcpServers": {
-                        "repograph": {
+                        "sherpa": {
                             "command": args.serve_python,
-                            "args": ["-m", "repograph.mcp_server", str(repo)],
+                            "args": ["-m", "codesherpa.mcp_server", str(repo)],
                         }
                     }
                 }

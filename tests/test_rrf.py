@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from repograph.retrieve.fusion import rrf_fuse
+from codesherpa.retrieve.fusion import rrf_fuse
 
 
 def test_single_list_preserves_order():

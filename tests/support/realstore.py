@@ -22,8 +22,8 @@ try:  # the fixture needs pytest; plain scripts (benchmark venvs) do not
 except ModuleNotFoundError:  # pragma: no cover
     pytest = None
 
-from repograph.gitlayer.sync import sync
-from repograph.store.sqlite_store import SQLiteIndexStore
+from codesherpa.gitlayer.sync import sync
+from codesherpa.store.sqlite_store import SQLiteIndexStore
 
 
 class RealIndex(NamedTuple):
@@ -36,7 +36,7 @@ def build_real_index(miniproject: Path, work_dir: Path) -> RealIndex:
     """Clone the fixture into ``work_dir`` and index it for real."""
     repo_root = work_dir / "repo"
     shutil.copytree(miniproject, repo_root)
-    shutil.rmtree(repo_root / ".repograph", ignore_errors=True)
+    shutil.rmtree(repo_root / ".sherpa", ignore_errors=True)
     db_path = work_dir / "index.db"
     sync(repo_root, db_path)
     store = SQLiteIndexStore(db_path)

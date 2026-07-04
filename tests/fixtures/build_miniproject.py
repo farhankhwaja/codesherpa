@@ -28,7 +28,7 @@ FIXTURE_DIRNAME = "miniproject"
 # Bump whenever COMMITS change so prebuilt fixtures rebuild (conftest checks
 # the marker written into the built repo's .git dir).
 FIXTURE_VERSION = 2
-_VERSION_MARKER = "repograph-fixture-version"
+_VERSION_MARKER = "sherpa-fixture-version"
 
 _AUTHOR_NAME = "Fixture Bot"
 _AUTHOR_EMAIL = "fixture@example.com"
@@ -40,7 +40,7 @@ _BASE_DATE = "2024-01-{day:02d}T12:00:00+00:00"
 # --------------------------------------------------------------------------
 
 _COMMIT_1_PY_CORE: dict[str, str | None] = {
-    "README.md": "# taskhub\n\nA tiny task tracker used as a repograph test fixture.\n",
+    "README.md": "# taskhub\n\nA tiny task tracker used as a sherpa test fixture.\n",
     "pyserver/__init__.py": '"""taskhub server package."""\n',
     "pyserver/config.py": '''\
 """Application configuration loading."""

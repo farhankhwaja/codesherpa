@@ -11,10 +11,10 @@ from pathlib import Path
 
 import pytest
 
-from repograph.gitlayer.initialize import init
-from repograph.gitlayer.repo import HOOK_NAMES, NotARepositoryError, open_repo
-from repograph.gitlayer.sync import default_db_path, sync
-from repograph.store.sqlite_store import SQLiteIndexStore
+from codesherpa.gitlayer.initialize import init
+from codesherpa.gitlayer.repo import HOOK_NAMES, NotARepositoryError, open_repo
+from codesherpa.gitlayer.sync import default_db_path, sync
+from codesherpa.store.sqlite_store import SQLiteIndexStore
 
 _GIT_ENV = {
     "GIT_AUTHOR_NAME": "Sync Bot",
@@ -41,15 +41,15 @@ def _git(repo: Path, *args: str) -> None:
 def repo(miniproject: Path, tmp_path: Path) -> Path:
     dest = tmp_path / "repo"
     shutil.copytree(miniproject, dest)
-    shutil.rmtree(dest / ".repograph", ignore_errors=True)
+    shutil.rmtree(dest / ".sherpa", ignore_errors=True)
     # keep the index out of the tests' own `git add -A` commits — real users
-    # get this from `repograph init` (ensure_gitignore), which some of these
+    # get this from `sherpa init` (ensure_gitignore), which some of these
     # tests deliberately bypass to exercise raw sync
-    from repograph.gitlayer.initialize import ensure_gitignore
+    from codesherpa.gitlayer.initialize import ensure_gitignore
 
     if ensure_gitignore(dest):
         _git(dest, "add", ".gitignore")
-        _git(dest, "-c", "commit.gpgsign=false", "commit", "-qm", "gitignore .repograph")
+        _git(dest, "-c", "commit.gpgsign=false", "commit", "-qm", "gitignore .sherpa")
     return dest
 
 
@@ -59,7 +59,7 @@ def repo(miniproject: Path, tmp_path: Path) -> Path:
 def test_init_creates_db_hooks_gitignore(repo: Path) -> None:
     result = init(repo, quiet=True)
 
-    assert result.db_path == repo / ".repograph" / "index.db"
+    assert result.db_path == repo / ".sherpa" / "index.db"
     assert result.db_path.is_file()
 
     hooks_dir = repo / ".git" / "hooks"
@@ -67,10 +67,10 @@ def test_init_creates_db_hooks_gitignore(repo: Path) -> None:
         hook = hooks_dir / name
         assert hook.is_file(), f"missing hook {name}"
         assert os.access(hook, os.X_OK), f"hook {name} not executable"
-        assert "repograph sync --quiet" in hook.read_text()
+        assert "sherpa sync --quiet" in hook.read_text()
 
     gitignore = (repo / ".gitignore").read_text()
-    assert ".repograph/" in gitignore
+    assert ".sherpa/" in gitignore
 
     assert result.stats.blobs_indexed > 20  # the fixture has 25+ source files
     assert result.stats.files_mapped > 20
@@ -85,14 +85,14 @@ def test_init_is_idempotent_and_preserves_foreign_hooks(repo: Path) -> None:
     init(repo, quiet=True)
     first = {name: (hooks_dir / name).read_text() for name in HOOK_NAMES}
     assert "echo existing-hook" in first["post-commit"]  # preserved
-    assert "repograph sync --quiet" in first["post-commit"]  # appended
+    assert "sherpa sync --quiet" in first["post-commit"]  # appended
 
     init(repo, quiet=True)
     second = {name: (hooks_dir / name).read_text() for name in HOOK_NAMES}
     assert first == second  # no duplicate appends
 
     gitignore = (repo / ".gitignore").read_text()
-    assert gitignore.count(".repograph/") == 1
+    assert gitignore.count(".sherpa/") == 1
 
 
 def test_init_outside_repo_fails(tmp_path: Path) -> None:
@@ -196,7 +196,7 @@ def test_deleted_file_deactivated_not_deleted(repo: Path) -> None:
         store.close()
 
 
-def test_sync_skips_binary_and_vendored_and_repographignore(repo: Path) -> None:
+def test_sync_skips_binary_and_vendored_and_sherpaignore(repo: Path) -> None:
     (repo / "assets").mkdir()
     (repo / "assets" / "logo.png").write_bytes(b"\x89PNG\x00\x00binary")
     (repo / "node_modules" / "dep").mkdir(parents=True)
@@ -205,7 +205,7 @@ def test_sync_skips_binary_and_vendored_and_repographignore(repo: Path) -> None:
     (repo / "app.min.js").write_text("var a=1;\n")
     (repo / "secret").mkdir()
     (repo / "secret" / "keys.py").write_text("KEY = 'x'\n")
-    (repo / ".repographignore").write_text("secret/\n")
+    (repo / ".sherpaignore").write_text("secret/\n")
     _git(repo, "add", "-Af")
     _git(repo, "-c", "commit.gpgsign=false", "commit", "-qm", "junk files")
 
@@ -218,7 +218,7 @@ def test_sync_skips_binary_and_vendored_and_repographignore(repo: Path) -> None:
         assert "yarn.lock" not in files
         assert "app.min.js" not in files
         assert "secret/keys.py" not in files
-        assert ".repographignore" in files  # the ignore file itself is fine
+        assert ".sherpaignore" in files  # the ignore file itself is fine
     finally:
         store.close()
 

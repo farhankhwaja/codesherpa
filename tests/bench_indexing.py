@@ -20,7 +20,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from repograph.gitlayer.sync import sync
+from codesherpa.gitlayer.sync import sync
 
 _GIT_ENV = {
     "GIT_AUTHOR_NAME": "Bench Bot",
@@ -149,7 +149,7 @@ def main() -> int:
     n_modules = int(args[0]) if args else 400
     keep = "--keep" in sys.argv
 
-    tmp = Path(tempfile.mkdtemp(prefix="repograph-bench-"))
+    tmp = Path(tempfile.mkdtemp(prefix="sherpa-bench-"))
     repo = tmp / "corpus"
     repo.mkdir()
     try:

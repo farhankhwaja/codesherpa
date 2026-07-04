@@ -149,7 +149,7 @@ false edge. Precision wins for ranked get_callers output.
 ## D17 — Eval factory contract and gate shape (Phase 4 builds the harness, Phase 3 runs it)
 `eval/run_eval.py` gates on a retriever factory `(repo_path, mode) ->
 Retriever` with mode ∈ {hybrid, bm25, vector}; default dotted path
-`repograph.retrieve:build_eval_retriever` (Phase 3 must provide it — proposed
+`codesherpa.retrieve:build_eval_retriever` (Phase 3 must provide it — proposed
 in PROGRESS.md). Thresholds are module constants (0.80/0.60, §13) with no
 CLI override, so they cannot be lowered without a diff in this file. Hit
 definition: a top-5 result whose `chunk.file_path` is in the gold entry's
@@ -223,7 +223,7 @@ expected symbol (breadcrumb or code). File-level relevance saturates on the
 fixture — vector-only alone hits recall@5 = 1.00, which would make the §13
 "hybrid strictly beats single methods" comparison meaningless — and file-level
 credit for e.g. an unrelated chunk of `tasks.py` does not measure what
-repograph is for (returning the right *function*). Measured under file-level
+sherpa is for (returning the right *function*). Measured under file-level
 relevance for the record (MiniLM, no rerank): vector-only 1.00/0.953, hybrid
 0.92/0.907. Symbol-aware: vector-only 0.92/0.831, hybrid 0.92/0.888.
 
@@ -310,20 +310,20 @@ Final-verification FAIL had two mechanical causes, both fixed:
 They were present on this branch pre-rebase; the third rebase's conflict
 resolution script string-matched against main's OLD dependency-list text and
 silently no-opped, dropping both lines while the comment referencing einops
-survived. Clean installs then failed the eval gates and `repograph serve`
+survived. Clean installs then failed the eval gates and `sherpa serve`
 died with a raw ModuleNotFoundError. Both are §6-sanctioned (D25 recorded
 the einops justification); now actually declared. Lesson recorded: verify
 conflict-resolution string replacements actually matched.
 (b) **`test_serve_reports_missing_retrieval_pipeline` retired** (§2.1, D5
 precedent). Its premise — "the retrieval pipeline does not exist yet, serve
 must explain that and exit 2" — expired the moment this branch provided
-`repograph.retrieve.build_retriever`; at commit 150a801 `serve .` genuinely
+`codesherpa.retrieve.build_retriever`; at commit 150a801 `serve .` genuinely
 serves, so the probe failed in every configuration (and, per the verifier's
 advisory, a passing real-serve run would have embedded the host repo from
 inside the test suite: ~10 MB index + minutes of CPU). Replaced by
 `test_serve_refuses_non_repository`: same fail-loudly/never-serve-fake-data
 intent, asserted against the nearest remaining bad input (non-git dir,
-nonzero exit, no .repograph created), no server launch, no repo mutation.
+nonzero exit, no .sherpa created), no server launch, no repo mutation.
 Real serving is covered by the MCP stdio integration test. EVAL_LOG's
 "273 passed at this commit" line was also stale (the suite run predated the
 `build_retriever` commit); corrected in place with a note.
@@ -332,15 +332,15 @@ Real serving is covered by the MCP stdio integration test. EVAL_LOG's
 Observed in the Phase 4 human smoke: `build_retriever` synced AND embedded the
 whole repo before the MCP handshake, so a first `search_code` stalled ~1.5 min
 (lazy model load) and a cold init embedded for ~2.5 min in silence. New
-ownership: `repograph init`/`repograph sync` run the embedding pass
-(repograph/retrieve/warm.py, with progress output — \r on a TTY, 10 % lines
+ownership: `sherpa init`/`sherpa sync` run the embedding pass
+(codesherpa/retrieve/warm.py, with progress output — \r on a TTY, 10 % lines
 otherwise); the production `build_retriever` only OPENS the existing index
 (no sync, no embed, no model import) and raises `IndexNotBuiltError` when
-there is none, so `repograph serve` exits 2 with "run `repograph init`"
+there is none, so `sherpa serve` exits 2 with "run `sherpa init`"
 instead of building an index as a side effect. While embeddings are missing
 the server still serves (BM25 + symbol + router channels) and every
 `search_code`/`index_status` response carries a `warming` field with the
-missing-embedding count and a "run `repograph sync`" hint — the amendment's
+missing-embedding count and a "run `sherpa sync`" hint — the amendment's
 "warming status" option, chosen over in-server async embedding to keep the
 serving process single-writer (the store connection is not thread-safe and
 embedding contends for the same SQLite file the server reads).
@@ -355,10 +355,10 @@ wipes the old vectors and the vec0 dim pin instead of silently mixing vector
 spaces in one KNN table (previously a dim mismatch raised at put time; a
 same-dim model switch would have gone completely undetected).
 (c) `sentence_transformers` loads pass `local_files_only=True` whenever the
-model directory already has a snapshot in ~/.cache/repograph/models (checked
+model directory already has a snapshot in ~/.cache/sherpa/models (checked
 against installed ST 5.6.0 signatures): warm starts perform zero network
 calls (§3f).
-(d) `repograph search` implemented (it needs exactly this read-only wiring;
+(d) `sherpa search` implemented (it needs exactly this read-only wiring;
 required for Phase 5 external-repo transcripts); the CLI
 unimplemented-command probe retargeted `search` → `bench` per the D5
 precedent — assertions unchanged.
@@ -478,3 +478,30 @@ date"), not in the test (§2.1: code fixed, test untouched). Bare dates are
 now normalized to `<date>T00:00:00Z`; full ISO datetimes pass through
 verbatim. UTC (not local) midnight so the same query returns the same
 commits on every machine.
+
+## D37 — Project renamed repograph → sherpa/codesherpa (human instruction, post-Phase-5)
+Explicit human instruction (two messages, the second amending the first).
+Final naming split and why: **PyPI distribution `codesherpa`**
+(PyPI-unique) and **Python package/imports `codesherpa`** (the existing
+PyPI `sherpa` package owns the `import sherpa` namespace — a top-level
+module collision is unacceptable), while everything user-facing is
+**`sherpa`**: console script / CLI command, MCP server name, index dir
+`.sherpa/`, ignore file `.sherpaignore`, model cache `~/.cache/sherpa/`.
+So: `pip install codesherpa` → run `sherpa init` → `import codesherpa`.
+Scope decisions:
+(a) `codesherpa/contracts/` files' import lines changed with the package
+name — a §2.2-frozen surface touched ONLY under this explicit human
+instruction; interfaces/signatures are byte-identical otherwise.
+(b) Historical records keep the old name verbatim: EVAL_LOG.md (append-only
+by its own charter), verification/ reports and A/B transcripts (they
+describe runs of the artifact as it was then named). CLAUDE.md (the human's
+governing spec) is also untouched; the mapping is recorded here and in
+PROGRESS.md for fresh sessions: read CLAUDE.md's "repograph" as this
+project — package now `codesherpa`, command now `sherpa`.
+(c) Mechanical gotcha for posterity: a single-pass sed chain double-applied
+(`sherpa.retrieve` matched inside freshly-written `codesherpa.retrieve` →
+`codecodesherpa`); caught by import failure, fixed, and the final audit
+greps for both stale module refs and nested artifacts.
+(d) Local model cache moved (`mv ~/.cache/repograph ~/.cache/sherpa`), no
+re-download. Suite green in-tree after each stage and from a clean
+checkout (verified before merge).

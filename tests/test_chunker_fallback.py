@@ -5,8 +5,8 @@ from __future__ import annotations
 from hypothesis import given
 from hypothesis import strategies as st
 
-from repograph.chunker import chunk_blob, detect_language
-from repograph.chunker.fallback import OVERLAP_LINES, WINDOW_LINES, chunk_lines
+from codesherpa.chunker import chunk_blob, detect_language
+from codesherpa.chunker.fallback import OVERLAP_LINES, WINDOW_LINES, chunk_lines
 
 BLOB = "f" * 40
 

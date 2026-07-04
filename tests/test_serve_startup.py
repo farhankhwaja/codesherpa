@@ -32,15 +32,15 @@ import pytest
 from mcp import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
 from mcp.shared.memory import create_connected_server_and_client_session
-from repograph.embed.engine import EmbeddingEngine
-from repograph.gitlayer.repo import NotARepositoryError
-from repograph.gitlayer.sync import default_db_path, sync
-from repograph.graph.gitio import last_change_dates
-from repograph.graph.view import SymbolGraph
-from repograph.mcp_server import create_server
-from repograph.retrieve import IndexNotBuiltError, build_retriever
-from repograph.retrieve.warm import embed_index, missing_embeddings
-from repograph.store.sqlite_store import SQLiteIndexStore
+from codesherpa.embed.engine import EmbeddingEngine
+from codesherpa.gitlayer.repo import NotARepositoryError
+from codesherpa.gitlayer.sync import default_db_path, sync
+from codesherpa.graph.gitio import last_change_dates
+from codesherpa.graph.view import SymbolGraph
+from codesherpa.mcp_server import create_server
+from codesherpa.retrieve import IndexNotBuiltError, build_retriever
+from codesherpa.retrieve.warm import embed_index, missing_embeddings
+from codesherpa.store.sqlite_store import SQLiteIndexStore
 from simple_retriever import SimpleRetriever
 
 HANDSHAKE_BUDGET_S = 5.0
@@ -60,7 +60,7 @@ def warmed_repo(miniproject, tmp_path_factory) -> Path:
     tmp = tmp_path_factory.mktemp("warmed-repo")
     repo = tmp / "repo"
     shutil.copytree(miniproject, repo)
-    shutil.rmtree(repo / ".repograph", ignore_errors=True)
+    shutil.rmtree(repo / ".sherpa", ignore_errors=True)
     sync(repo)
     store = SQLiteIndexStore(default_db_path(repo))
     try:
@@ -94,7 +94,7 @@ def test_cold_handshake_under_5s_and_router_tools_need_no_model(
     fake_home.mkdir()
     params = StdioServerParameters(
         command=sys.executable,
-        args=["-m", "repograph.mcp_server", str(warmed_repo)],
+        args=["-m", "codesherpa.mcp_server", str(warmed_repo)],
         env=_offline_env(fake_home),
     )
 
@@ -141,7 +141,7 @@ def test_cold_handshake_under_5s_and_router_tools_need_no_model(
 def test_build_retriever_never_syncs_or_embeds(miniproject, tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     shutil.copytree(miniproject, repo)
-    shutil.rmtree(repo / ".repograph", ignore_errors=True)
+    shutil.rmtree(repo / ".sherpa", ignore_errors=True)
     sync(repo)
 
     # move the working tree ahead of the index: a syncing build_retriever
@@ -181,23 +181,23 @@ def test_build_retriever_friendly_failures(miniproject, tmp_path: Path) -> None:
 
     repo = tmp_path / "noindex"
     shutil.copytree(miniproject, repo)
-    shutil.rmtree(repo / ".repograph", ignore_errors=True)
-    with pytest.raises(IndexNotBuiltError, match="repograph init"):
+    shutil.rmtree(repo / ".sherpa", ignore_errors=True)
+    with pytest.raises(IndexNotBuiltError, match="sherpa init"):
         build_retriever(str(repo))
 
 
 def test_serve_without_index_exits_2_with_hint(miniproject, tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     shutil.copytree(miniproject, repo)
-    shutil.rmtree(repo / ".repograph", ignore_errors=True)
+    shutil.rmtree(repo / ".sherpa", ignore_errors=True)
     result = subprocess.run(
-        [sys.executable, "-m", "repograph.cli", "serve", str(repo)],
+        [sys.executable, "-m", "codesherpa.cli", "serve", str(repo)],
         capture_output=True,
         text=True,
         timeout=60,
     )
     assert result.returncode == 2
-    assert "repograph init" in result.stderr
+    assert "sherpa init" in result.stderr
 
 
 # ------------------------------------------------ warming status (in-memory)
@@ -215,7 +215,7 @@ def test_tools_report_warming_while_embeddings_missing(synced_miniproject) -> No
                 status = _payload(await session.call_tool("index_status", {}))
                 assert status["missing_embeddings"] > 0
                 assert status["warming"] is True
-                assert "repograph sync" in status["hint"]
+                assert "sherpa sync" in status["hint"]
 
                 payload = _payload(
                     await session.call_tool(
@@ -223,7 +223,7 @@ def test_tools_report_warming_while_embeddings_missing(synced_miniproject) -> No
                     )
                 )
                 assert payload["warming"]["missing_embeddings"] > 0
-                assert "repograph sync" in payload["warming"]["hint"]
+                assert "sherpa sync" in payload["warming"]["hint"]
 
         anyio.run(go)
     finally:

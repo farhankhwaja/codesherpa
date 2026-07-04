@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from repograph.retrieve.router import extract_identifier_tokens, split_identifier
-from repograph.retrieve.tokens import estimate_tokens, result_token_cost
+from codesherpa.retrieve.router import extract_identifier_tokens, split_identifier
+from codesherpa.retrieve.tokens import estimate_tokens, result_token_cost
 
 
 class TestExtractIdentifierTokens:

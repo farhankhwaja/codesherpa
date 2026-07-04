@@ -10,8 +10,8 @@ build/
 .pytest_cache/
 .hypothesis/
 
-# repograph's own index (never commit an index)
-.repograph/
+# sherpa's own index (never commit an index)
+.sherpa/
 
 # generated fixture repo — rebuilt by tests/fixtures/build_miniproject.py
 tests/fixtures/miniproject/

@@ -13,7 +13,7 @@ import time
 
 import pytest
 
-from repograph.contracts.types import (
+from codesherpa.contracts.types import (
     Chunk,
     Edge,
     EdgeKind,
@@ -21,12 +21,12 @@ from repograph.contracts.types import (
     SymbolKind,
     SymbolNode,
 )
-from repograph.embed.engine import EmbeddingEngine
-from repograph.retrieve.config import RetrievalConfig
-from repograph.retrieve.rerank import CrossEncoderReranker
-from repograph.retrieve.retriever import HybridRetriever
-from repograph.retrieve.router import split_identifier
-from repograph.store.sqlite_store import SQLiteIndexStore
+from codesherpa.embed.engine import EmbeddingEngine
+from codesherpa.retrieve.config import RetrievalConfig
+from codesherpa.retrieve.rerank import CrossEncoderReranker
+from codesherpa.retrieve.retriever import HybridRetriever
+from codesherpa.retrieve.router import split_identifier
+from codesherpa.store.sqlite_store import SQLiteIndexStore
 
 BLOB_HTTP = "a" * 40
 BLOB_ROUTES = "b" * 40

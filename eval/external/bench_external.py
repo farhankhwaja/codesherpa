@@ -2,7 +2,7 @@
 """External-repo retrieval benchmark (Phase 5 §3a/§3b).
 
 Given a repo and a gold-query jsonl, builds one index DB per embedding model
-(in a temp dir — the repo's own .repograph is untouched) and reports, per
+(in a temp dir — the repo's own .sherpa is untouched) and reports, per
 model: vector-only and full-hybrid recall@5 / MRR (file-level hits, same
 definition as eval/run_eval.py), embed time, and warm-query latency. Also
 measures the graph-expansion ON/OFF delta for the shipping pipeline.
@@ -24,12 +24,12 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from repograph.embed.engine import EmbeddingEngine  # noqa: E402
-from repograph.gitlayer.sync import sync  # noqa: E402
-from repograph.retrieve import HybridRetriever, RetrievalConfig  # noqa: E402
-from repograph.retrieve.evalfactory import SingleChannelRetriever  # noqa: E402
-from repograph.retrieve.warm import embed_index  # noqa: E402
-from repograph.store.sqlite_store import SQLiteIndexStore  # noqa: E402
+from codesherpa.embed.engine import EmbeddingEngine  # noqa: E402
+from codesherpa.gitlayer.sync import sync  # noqa: E402
+from codesherpa.retrieve import HybridRetriever, RetrievalConfig  # noqa: E402
+from codesherpa.retrieve.evalfactory import SingleChannelRetriever  # noqa: E402
+from codesherpa.retrieve.warm import embed_index  # noqa: E402
+from codesherpa.store.sqlite_store import SQLiteIndexStore  # noqa: E402
 
 TOP_K = 5
 

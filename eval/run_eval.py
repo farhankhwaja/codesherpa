@@ -4,7 +4,7 @@
 Usage (Phase 3 gate, CLAUDE.md §10/§13)::
 
     python eval/run_eval.py --repo tests/fixtures/miniproject \\
-        --retriever repograph.retrieve:build_eval_retriever [--mode all]
+        --retriever codesherpa.retrieve:build_eval_retriever [--mode all]
 
 The ``--retriever`` factory is ``module:attr`` resolving to
 ``factory(repo_path: str, mode: str) -> Retriever`` where mode is one of
@@ -179,7 +179,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repo", required=True, help="Path of the indexed repo to query.")
     parser.add_argument(
         "--retriever",
-        default="repograph.retrieve:build_eval_retriever",
+        default="codesherpa.retrieve:build_eval_retriever",
         help="Factory 'module:attr' with signature (repo_path, mode) -> Retriever.",
     )
     parser.add_argument("--mode", choices=[*_MODES, "all"], default="all")

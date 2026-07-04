@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from repograph.contracts.index_contract import IndexStore
-from repograph.contracts.types import Chunk, Edge, EdgeKind, SymbolKind, SymbolNode
-from repograph.store.sqlite_store import SQLiteIndexStore
+from codesherpa.contracts.index_contract import IndexStore
+from codesherpa.contracts.types import Chunk, Edge, EdgeKind, SymbolKind, SymbolNode
+from codesherpa.store.sqlite_store import SQLiteIndexStore
 
 
 @pytest.fixture()

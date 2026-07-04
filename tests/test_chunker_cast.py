@@ -10,9 +10,9 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from repograph.chunker import chunk_blob, detect_language
-from repograph.chunker.cast import MAX_CHUNK_NONWS, chunk_ast, _nonws
-from repograph.contracts.types import Chunk
+from codesherpa.chunker import chunk_blob, detect_language
+from codesherpa.chunker.cast import MAX_CHUNK_NONWS, chunk_ast, _nonws
+from codesherpa.contracts.types import Chunk
 
 BLOB = "c" * 40
 
@@ -189,7 +189,7 @@ def test_breadcrumb_typescript_method() -> None:
 
 def test_broken_file_falls_back_with_warning(caplog: pytest.LogCaptureFixture) -> None:
     src = b"def broken(:::\n    what\n"
-    with caplog.at_level(logging.WARNING, logger="repograph.chunker.cast"):
+    with caplog.at_level(logging.WARNING, logger="codesherpa.chunker.cast"):
         chunks = chunk_blob(BLOB, src, "broken.py")
     assert chunks, "fallback must still produce chunks"
     assert any("falling back to line windows" in r.message for r in caplog.records)
@@ -218,7 +218,7 @@ def test_fixture_files_parse_without_fallback(
     ).stdout.splitlines()
     paths = [p for p in tracked if p.endswith(suffixes)]
     assert len(paths) >= 10
-    with caplog.at_level(logging.WARNING, logger="repograph.chunker.cast"):
+    with caplog.at_level(logging.WARNING, logger="codesherpa.chunker.cast"):
         for rel in paths:
             data = (miniproject / rel).read_bytes()
             chunks = chunk_blob(BLOB, data, rel)

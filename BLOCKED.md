@@ -3,7 +3,7 @@
 ## B3 — §13 A/B token-reduction target (≥50 %) not met (Phase 5)
 
 Measured (EVAL_LOG 2026-07-04, full report verification/ab/ab-results.md):
-tokens_total per solved task, arm B (repograph) vs arm A: fixture −69.8 %
+tokens_total per solved task, arm B (sherpa) vs arm A: fixture −69.8 %
 (B uses MORE), sizly +2.2 %. Target was ≥ +50 %. Solve-rate guardrail
 passed (B 21/21 vs A 19/21 — B solved both tasks A failed); tool calls and
 whole-file reads dropped materially; billing-weighted cost within ±25 %.

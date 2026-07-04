@@ -27,7 +27,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "tests"))
 
-from repograph.gitlayer.sync import sync  # noqa: E402
+from codesherpa.gitlayer.sync import sync  # noqa: E402
 from test_golden import GOLDEN_PROJECTION, golden_state  # noqa: E402
 
 

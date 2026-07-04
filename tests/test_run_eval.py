@@ -15,10 +15,10 @@ from pathlib import Path
 
 import pytest
 
-from repograph.contracts.retrieval_contract import Retriever
-from repograph.contracts.types import Chunk, PackedContext, RetrievalSource, SearchResult
-from repograph.graph.view import SymbolGraph
-from repograph.store.sqlite_store import SQLiteIndexStore
+from codesherpa.contracts.retrieval_contract import Retriever
+from codesherpa.contracts.types import Chunk, PackedContext, RetrievalSource, SearchResult
+from codesherpa.graph.view import SymbolGraph
+from codesherpa.store.sqlite_store import SQLiteIndexStore
 from simple_retriever import SimpleRetriever
 
 ROOT = Path(__file__).parent.parent

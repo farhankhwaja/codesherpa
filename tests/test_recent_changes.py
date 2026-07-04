@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from repograph.graph.recent import recent_changes
+from codesherpa.graph.recent import recent_changes
 
 
 def test_since_ref_returns_newest_first(miniproject: Path):
