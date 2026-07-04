@@ -72,3 +72,6 @@ done until a human runs it):**
   this also shields graph extraction, closing advisory A1).
 - Fixture v2 (7 commits; version marker auto-rebuilds prebuilt copies).
 - GPG signing requires unsandboxed git commits (gpg agent socket).
+- Verifier informational finding (pre-rebase run): router token regex is
+  ASCII-only — non-ASCII identifiers skip the <50 ms fast path (graceful
+  dense-path fallback, no crash). Widen `_TOKEN_RE` if needed.
