@@ -206,6 +206,8 @@ def test_sync_skips_binary_and_vendored_and_sherpaignore(repo: Path) -> None:
     (repo / "secret").mkdir()
     (repo / "secret" / "keys.py").write_text("KEY = 'x'\n")
     (repo / ".sherpaignore").write_text("secret/\n")
+    (repo / ".cache" / "tool").mkdir(parents=True)  # D38: junk-dir additions
+    (repo / ".cache" / "tool" / "state.py").write_text("CACHED = True\n")
     _git(repo, "add", "-Af")
     _git(repo, "-c", "commit.gpgsign=false", "commit", "-qm", "junk files")
 
@@ -218,7 +220,29 @@ def test_sync_skips_binary_and_vendored_and_sherpaignore(repo: Path) -> None:
         assert "yarn.lock" not in files
         assert "app.min.js" not in files
         assert "secret/keys.py" not in files
+        assert ".cache/tool/state.py" not in files
         assert ".sherpaignore" in files  # the ignore file itself is fine
+    finally:
+        store.close()
+
+
+def test_sync_never_stores_a_mega_chunk(repo: Path) -> None:
+    """D38 end-to-end bound: a committed single-line data file (well under
+    the 2 MiB whole-file guard) must be stored as byte-capped chunks."""
+    from codesherpa.chunker.fallback import MAX_CHUNK_BYTES
+
+    (repo / "trace.jsonl").write_text('{"log":"' + "z" * 500_000 + '"}\n')
+    _git(repo, "add", "-Af")
+    _git(repo, "-c", "commit.gpgsign=false", "commit", "-qm", "single-line data file")
+
+    sync(repo)
+    store = SQLiteIndexStore(default_db_path(repo))
+    try:
+        widest = store.conn.execute(
+            "SELECT MAX(byte_end - byte_start) FROM chunks"
+        ).fetchone()[0]
+        assert widest <= MAX_CHUNK_BYTES
+        assert "trace.jsonl" in store.files_for_ref("HEAD")  # indexed, bounded
     finally:
         store.close()
 

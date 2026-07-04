@@ -505,3 +505,88 @@ greps for both stale module refs and nested artifacts.
 (d) Local model cache moved (`mv ~/.cache/repograph ~/.cache/sherpa`), no
 re-download. Suite green in-tree after each stage and from a clean
 checkout (verified before merge).
+
+## D38 — Embedding memory blowup on single-line mega-chunks (Phase 6 hardening finding)
+Found dogfooding the ship flow: `sherpa sync` on a clone of THIS repo hung
+with runaway memory (14–17 GB RSS, 61 min CPU; reproduced twice, killed by
+the human). Diagnosis chain, with an isolated guarded repro:
+(1) The repo's committed A/B transcript files (verification/ab/fixture/
+*.stream.jsonl) are single-line files of 54–288 KB — under the 2 MiB
+whole-file guard, not in any junk dir, so correctly indexed. (2) The
+line-window fallback chunker had NO byte cap: a single-line file is one
+window, so one 287 KB chunk. (3) The embedder's tokenizer truncates each
+text to the model's max_seq_len (8192 for nomic) — ONE mega-chunk encodes
+fine (measured 4.6 s / 1.8 GB RSS) — but sentence-transformers sorts by
+length, so ALL the mega-chunks land in the same batch of 32; attention
+memory is batch × heads × seq², measured 2.6 GB at batch 2 and extrapolating
+to ~25 GB at batch 32 — the observed pathology. The ignore rules were NOT at
+fault (sync itself: 142 files in 0.25 s; .venv untracked and also in
+SKIP_DIR_COMPONENTS).
+Fixes, each with a regression test:
+(a) fallback chunker: hard `MAX_CHUNK_BYTES = 16384` — oversized windows are
+split into contiguous byte slices (single-line 2 MB file → capped chunks,
+full coverage, deterministic);
+(b) engine: `ENCODER_MAX_CHARS = 8192` head-truncation of every text fed to
+the encoder (chunk text AND query) — the engine-level bound that holds for
+any input; no legitimate cAST chunk comes near it, so no cached vector
+changes (no embed-tag bump);
+(c) `.cache` added to SKIP_DIR_COMPONENTS (the one junk dir missing —
+.venv/venv/node_modules/dist/build were already there);
+(d) `sherpa sync` prints `indexing files done/total` progress (non-quiet,
+>20 files) so long first syncs are distinguishable from hangs;
+(e) batches already stream to the DB per batch (warm.embed_index →
+engine.embed_chunks writes each vector immediately); RAM was transformer
+activations, not accumulation — documented, not changed.
+Related cleanup found during the same investigation: the rename sed turned
+.gitignore's `.repograph/` into `.sherpa/`, so the legacy `.repograph/`
+index dir became unignored and the rename commit accidentally tracked
+7.5 MB+ of index binaries. Removed from tracking; `.repograph/` re-ignored
+permanently; `sherpa init` now warns when a legacy `.repograph/` dir exists.
+
+## D38-final — Corrected diagnosis: token-level clamp closes the memory hole (Phase 6)
+D38's first fix (byte-cap fallback chunks + CHAR-cap encoder input) did not
+close the hole: a clean-clone `sherpa init` still ran away (10–15.5 GB RSS,
+reproduced live). Named-culprit instrumentation on the real engine path
+(per encode call: chunk ids, paths, byte length, TOKENIZED length, current
+RSS via ps before/after) identified the mechanism exactly:
+
+- The char cap held (max 8,209 chars/text) but dense JSON tokenizes at
+  ~2.6 chars/token, so texts reached **3,093 tokens**; ONE batch of 32 such
+  texts took RSS 1.6 → 10.1 GB in a single forward pass (attention =
+  batch × heads × seq²). A character cap is the WRONG UNIT.
+- Verified independently on the trust_remote_code path: after clamping,
+  `model.tokenize` of 8,192 chars of dense JSON returns exactly 1,024 input
+  ids — nomic honors ST's max_seq_length; no tokenize-first workaround
+  needed.
+- Accumulation ruled out: 12 consecutive short-text batches hold current
+  RSS flat at 1.45 GB (results stream to SQLite per batch; ST encode runs
+  under no_grad; nothing retained across calls). The worst real batch peaks
+  4.3 GB and falls back to 3.9 GB.
+
+Fix: `ENCODER_MAX_TOKENS = 1024` — the engine clamps the loaded model's
+max_seq_length (typical cAST code chunks are ~450 BPE tokens, so no cached
+vector changes; only pathological data chunks are tail-truncated). The char
+cap stays as a cheap pre-tokenization guard, and the D38 chunker byte cap
+stays as defense in depth. Regression tests written failing-first:
+max_seq_length clamp asserted on the load path, plus a REAL-nomic subprocess
+test that embeds 16 dense-JSON texts and asserts peak ru_maxrss < 6 GB
+(tests/test_embed_memory.py).
+
+Proof on the reproducing case: clean-clone `sherpa init` on this repo now
+completes 535/535 chunks in 137 s with **peak RSS 4.06 GB**
+(/usr/bin/time -l). Note for the record: one "the fix failed" observation
+during this investigation was a stale PRE-fix init process that had kept
+running and was killed at 10.5 GB — the timed post-fix runs are the ones
+above. The Phase 6 verifier's exploratory attacks must include a clean-clone
+`sherpa init` with a memory ceiling.
+
+## D39 — Compact-first search_code (human's B3 decision, Phase 6)
+The human resolved BLOCKED B3: ship the token-diet as a product change and
+re-measure. `search_code` now defaults to a **1500-token budget** and
+returns **signature/breadcrumb + expand_id rows with no code bodies**
+(`include_code=true` restores full rows); the tool description steers the
+agent to expand() only the 1–2 hits that matter. Response-envelope trimming
+(D18) unchanged and now binds at 1500. The frozen Retriever contract is
+untouched (its search() default stays 4000 — this is MCP-layer presentation).
+Measured in the A/B v2 rerun on the same 21 frozen tasks (EVAL_LOG; v1 entry
+untouched per the harness honesty rules).

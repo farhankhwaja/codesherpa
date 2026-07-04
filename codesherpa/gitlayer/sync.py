@@ -75,7 +75,7 @@ def sync(
     with lock:
         store = SQLiteIndexStore(db)
         try:
-            _sync_locked(repo, root, store, stats)
+            _sync_locked(repo, root, store, stats, quiet=quiet)
         finally:
             store.close()
     stats.seconds = time.perf_counter() - started
@@ -94,7 +94,9 @@ def sync(
     return stats
 
 
-def _sync_locked(repo, root: Path, store: SQLiteIndexStore, stats: SyncStats) -> None:
+def _sync_locked(
+    repo, root: Path, store: SQLiteIndexStore, stats: SyncStats, quiet: bool = True
+) -> None:
     ignore = IgnoreRules.load(root)
     tree = head_tree_blobs(repo)
 
@@ -115,9 +117,18 @@ def _sync_locked(repo, root: Path, store: SQLiteIndexStore, stats: SyncStats) ->
     known_before = {b for b in blob_to_path if store.has_blob(b)}
     binary_blobs: set[str] = set()
 
+    # per-file progress so a long first index is distinguishable from a hang
+    # (Phase 6 hardening finding, D38)
+    todo = [b for b in sorted(blob_to_path) if not store.has_blob(b)]
+    step = max(1, len(todo) // 10)
+    done = 0
+
     for blob_hash, path in sorted(blob_to_path.items()):
         if store.has_blob(blob_hash):
             continue  # content-addressed cache hit: nothing to do, ever
+        done += 1
+        if not quiet and len(todo) > 20 and (done % step == 0 or done == len(todo)):
+            print(f"sherpa sync: indexing files {done}/{len(todo)}", file=sys.stderr, flush=True)
         data = read_blob(repo, blob_hash)
         if looks_binary(data):
             binary_blobs.add(blob_hash)

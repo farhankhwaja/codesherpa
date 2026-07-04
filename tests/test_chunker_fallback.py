@@ -103,3 +103,32 @@ def test_determinism_and_coverage_property(data: bytes) -> None:
         assert covered == set(range(len(data)))
     else:
         assert a == []
+
+
+def test_single_line_mega_file_is_byte_capped() -> None:
+    """D38 regression: a single-line file (large JSONL rows, minified data)
+    must never emit an unbounded chunk — a 287 KB single-line chunk reaching
+    a length-sorted embedding batch measured >14 GB RSS."""
+    from codesherpa.chunker.fallback import MAX_CHUNK_BYTES, chunk_lines
+
+    data = (b'{"x":"' + b"a" * (2 * 1024 * 1024) + b'"}')  # 2 MB, one line
+    chunks = chunk_lines("f" * 40, data, "trace.jsonl", "text")
+    assert len(chunks) > 1
+    assert all(c.byte_end - c.byte_start <= MAX_CHUNK_BYTES for c in chunks)
+    # contiguous full coverage, byte-exact
+    assert chunks[0].byte_start == 0 and chunks[-1].byte_end == len(data)
+    for a, b in zip(chunks, chunks[1:]):
+        assert b.byte_start == a.byte_end
+    # deterministic
+    again = chunk_lines("f" * 40, data, "trace.jsonl", "text")
+    assert [(c.byte_start, c.byte_end) for c in again] == [
+        (c.byte_start, c.byte_end) for c in chunks
+    ]
+
+
+def test_multi_line_windows_also_respect_byte_cap() -> None:
+    from codesherpa.chunker.fallback import MAX_CHUNK_BYTES, chunk_lines
+
+    line = b"y" * 4000 + b"\n"  # 120-line window would be ~480 KB
+    chunks = chunk_lines("e" * 40, line * 300, "big.txt", "text")
+    assert all(c.byte_end - c.byte_start <= MAX_CHUNK_BYTES for c in chunks)

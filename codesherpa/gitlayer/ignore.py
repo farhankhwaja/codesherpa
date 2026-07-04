@@ -30,6 +30,7 @@ SKIP_DIR_COMPONENTS = {
     ".venv",
     "venv",
     ".tox",
+    ".cache",
     ".mypy_cache",
     ".pytest_cache",
 }

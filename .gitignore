@@ -12,6 +12,7 @@ build/
 
 # sherpa's own index (never commit an index)
 .sherpa/
+.repograph/   # legacy pre-rename index dir, never commit
 
 # generated fixture repo — rebuilt by tests/fixtures/build_miniproject.py
 tests/fixtures/miniproject/

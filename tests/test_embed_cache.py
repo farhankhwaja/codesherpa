@@ -154,3 +154,31 @@ def test_duplicate_chunks_in_one_call_computed_once(store):
 def test_invalid_batch_size_raises(store):
     with pytest.raises(ValueError):
         EmbeddingEngine(store, "m", batch_size=0)
+
+
+def test_encoder_input_is_hard_capped(store):
+    """D38 regression: whatever a chunker emits, the engine feeds the encoder
+    at most ENCODER_MAX_CHARS characters per text (plus the model prefix)."""
+    from codesherpa.embed.engine import ENCODER_MAX_CHARS
+
+    seen: list[int] = []
+
+    def strict_encoder(texts):
+        for t in texts:
+            seen.append(len(t))
+            assert len(t) <= ENCODER_MAX_CHARS + 32, "mega-text reached the encoder"
+        return [[1.0, 0.0] for _ in texts]
+
+    mega = make_chunk(
+        blob_hash="a" * 40,
+        byte_start=0,
+        byte_end=300_000,
+        code="x" * 300_000,  # like a single-line JSONL transcript
+        breadcrumb="trace.jsonl :: L1-1",
+    )
+    store.add_blob(mega.blob_hash, "text", 300_000)
+    store.add_chunks([mega])
+    engine = EmbeddingEngine(store, "cap-stub", encoder=strict_encoder)
+    engine.embed_chunks([mega])
+    engine.embed_query("q" * 100_000)
+    assert len(seen) == 2 and all(n <= ENCODER_MAX_CHARS + 32 for n in seen)

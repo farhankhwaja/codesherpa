@@ -48,7 +48,13 @@ def init(repo_path: Path | str, quiet: bool = False) -> InitResult:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     gitignore_updated = ensure_gitignore(root)
     hooks = install_hooks(repo)
-    stats = sync(root, quiet=True)
+    if not quiet and (root / ".repograph").is_dir():
+        print(
+            "sherpa: found a legacy .repograph/ index directory (pre-rename); "
+            "it is no longer used — safe to delete.",
+            file=sys.stderr,
+        )
+    stats = sync(root, quiet=quiet)
 
     if not quiet:
         print(

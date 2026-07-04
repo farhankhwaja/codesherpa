@@ -86,12 +86,17 @@ def create_server(
     )
 
     @mcp.tool()
-    def search_code(query: str, budget_tokens: int = 4000) -> str:
+    def search_code(
+        query: str, budget_tokens: int = 1500, include_code: bool = False
+    ) -> str:
         """Hybrid code search under a token budget. Use this INSTEAD of grep +
-        reading whole files: it returns the most relevant function-level chunks
-        across the repo (lexical + semantic + symbol-aware), already
-        deduplicated and packed to fit budget_tokens. Each result has an
-        expand_id for fetching surrounding context later."""
+        reading whole files: it returns the most relevant function-level
+        matches across the repo (lexical + semantic + symbol-aware), already
+        deduplicated. COMPACT-FIRST: each result is a signature/breadcrumb
+        row with an expand_id — call expand(expand_id) for the full body of
+        the hits that matter (usually 1-2), instead of paying for code you
+        will not read. Set include_code=true only when you know you need
+        bodies for most results."""
         packed = retriever.search(query, budget_tokens=budget_tokens)
         results = list(packed.results)
         missing = _missing_embeddings(store)
@@ -102,7 +107,7 @@ def create_server(
                 "query": packed.query,
                 "budget_tokens": packed.budget_tokens,
                 "total_tokens": sum(r.token_count for r in results),
-                "results": [_result_row(r, with_code=True) for r in results],
+                "results": [_result_row(r, with_code=include_code) for r in results],
             }
             if missing:
                 payload["warming"] = {
