@@ -662,3 +662,47 @@ tests/test_licensing.py so the legal posture is now pinned by the suite.
 Historical records (CLAUDE.md §10's "LICENSE (MIT)" checklist line, past
 verifier reports, EVAL_LOG) intentionally keep the old wording; PROGRESS
 records "MIT at ship; relicensed Apache-2.0".
+
+## D43 — Go language support (Phase A, feature/go-support)
+Go joins Py/TS/JS/TSX following the "a language = a LanguageSpec + a query
+file" architecture, with four Go-specific choices:
+(a) **Receiver-scoped breadcrumbs.** Go methods are TOP-LEVEL declarations
+(not nested like class methods), so recursion never hands them a scope;
+cast.py surfaces the receiver instead: `path :: (Store) :: func (s *Store)
+Save(...)` (pointer stripped). The same rule feeds `_node_name` when an
+oversized method recurses.
+(b) **Receiver-typed call resolution, evidence-authoritative.** go.scm emits
+`@call.recv` (selector operand) and `@bind.name/@bind.type` (params — incl.
+method receivers — `var x T`, `x := T{...}`, `x := &T{...}`). When a call's
+receiver has a locally evident type, resolution consults ONLY that type's
+methods; no match (interface value, external type) -> the edge is DROPPED —
+type evidence is never overridden by name guessing. Pinned by a two-types-
+one-method-name disambiguation test and an interface-parameter negative
+test. Without evidence the ordinary §7.3 ladder applies, so a call through
+a struct FIELD typed as an interface may still resolve by package-unique
+name — documented best-effort, same as every other language; **interface-
+satisfaction resolution is explicitly out of scope** (requires type
+checking).
+(c) **Package imports resolve to a representative file.** Go imports name a
+package (module-qualified); the resolver suffix-matches progressively
+shorter tails of the import path against project directories and represents
+the package by its lexicographically first .go file (imports are
+module-to-module edges, so any stable representative works). Aliased
+imports bind the alias. Stdlib/external imports resolve to None.
+(d) **Router morphology gained code-context shapes.** Go exported symbols
+are single-capital PascalCase (`Flush`) — no snake/camel morphology — so the
+Go stack-trace gold query missed the router fast path (measured 216 ms vs
+the 200 ms gate). Tokens that appear call-shaped (`Flush(`), dot-prefixed
+(`.Flush`), or receiver-shaped (`(*Archive)`) IN THE QUERY are now
+identifier candidates regardless of casing; prose never uses those shapes,
+preserving the D21 anti-hijack property (asserted by a new sentence-case
+negative test).
+Also: `String/Error/Len/Close/Write/Read` join the generic-name stoplist
+(ubiquitous Go interface methods; receiver-typed and same-file/import
+resolution still apply). Fixture v3 adds goexport/gorunner as APPEND-ONLY
+commit 8 (earlier SHAs unchanged; FIXTURE_VERSION 2->3); history-anchored
+recent-changes/MCP tests shifted to the 8-commit history (v2 precedent,
+assertions equivalent). Gold set 35 -> 39 (additive; nl_hard ratchet
+holds). Official gate on the extended set: hybrid 0.974/0.869 vs bm25
+0.744 / vector 0.795, sole miss still q28 — GATE: PASS, thresholds
+untouched.

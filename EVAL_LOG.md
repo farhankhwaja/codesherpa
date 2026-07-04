@@ -275,3 +275,24 @@ verification/ab/ab-results-v2.md.
 - Guardrail B ≥ A holds (20/21 vs 19/21). Variance note: v1↔v2 flipped two
   task outcomes (sizly D2, D5) — single-run-per-task remains the harness's
   main limitation.
+
+## 2026-07-05 — Phase A (feature/go-support) — official gate on the extended gold set
+
+Gold set 35 -> 39 queries (4 Go: nl, symbol, nl_hard, stack-trace — additive
+only). Fixture v3 (append-only commit 8: goexport/gorunner Go package).
+`eval/run_eval.py --mode all`, thresholds untouched:
+
+| mode | recall@5 | MRR | p50 | p95 | misses |
+|---|---|---|---|---|---|
+| hybrid | **0.974** | **0.869** | 168 ms | 177 ms | q28 |
+| bm25-only | 0.744 | 0.611 | 0.3 ms | 0.3 ms | 10 queries |
+| vector-only | 0.795 | 0.714 | 18 ms | 26 ms | 8 queries |
+
+- recall@5 0.974 >= 0.80 ✓; MRR 0.869 >= 0.60 ✓; hybrid strictly beats both
+  single channels ✓ — **GATE: PASS**
+- All 4 Go queries hit, including the vocabulary-mismatch nl_hard (q38) and
+  the Go stack trace (q39 — via the router fast path after the code-context
+  morphology fix, D43d; router stacktrace p95 back under the 200 ms gate).
+- hybrid recall by type: nl 1.00 · symbol 1.00 · stacktrace 1.00 ·
+  decoy 1.00 · nl_hard 0.89 (q28 remains the sole documented miss).
+- Full suite: 305 passed, 0 failed, 0 skipped.

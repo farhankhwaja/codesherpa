@@ -74,3 +74,30 @@ class TestEstimateTokens:
 
     def test_result_cost_includes_breadcrumb(self):
         assert result_token_cost("a.py :: foo", "code") > estimate_tokens("code")
+
+
+def test_go_stacktrace_symbols_are_code_context_candidates():
+    """Go exported symbols are single-capital PascalCase (`Flush`) — no
+    snake/camel morphology — but a stack trace uses them in code shapes:
+    `pkg.(*Archive).Flush(0x...)`. Those shapes qualify (Phase A)."""
+    from codesherpa.retrieve.router import extract_identifier_tokens
+
+    trace = (
+        "goroutine 7 [running]:\n"
+        "example.com/taskhub/goexport.(*Archive).Flush(0xc000010250)\n"
+        "\t/app/goexport/archive.go:41 +0x1f"
+    )
+    tokens = extract_identifier_tokens(trace)
+    assert "Flush" in tokens
+    assert "Archive" in tokens
+
+
+def test_prose_capitalized_words_are_still_not_candidates():
+    """The D21 anti-hijack guard: sentence-case English words never become
+    router candidates just for being capitalized."""
+    from codesherpa.retrieve.router import extract_identifier_tokens
+
+    tokens = extract_identifier_tokens("Where does the Store keep completed Tasks")
+    assert "Where" not in tokens
+    assert "Store" not in tokens
+    assert "Tasks" not in tokens
