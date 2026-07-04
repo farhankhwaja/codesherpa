@@ -191,3 +191,32 @@ pass with progress output). Transcripts: verification/phase5/.
   0–70 ms with no model load.
 - MCP cold handshake with built index: regression-tested < 5 s
   (tests/test_serve_startup.py, offline env).
+
+## 2026-07-04 — Phase 5 — external embedder re-benchmark + expansion delta (branch phase-5)
+
+eval/external/bench_external.py, file-level hits, CPU (full tables + decision
+reasoning in DECISIONS.md D33/D34):
+
+| repo (queries) | model | vector-only r@5/MRR | hybrid r@5/MRR | hybrid p95 | embed |
+|---|---|---|---|---|---|
+| flask (14) | nomic (ship) | 0.357 / 0.310 | **0.857 / 0.768** | 261 ms | 237.7 s |
+| flask (14) | MiniLM | 0.786 / 0.583 | 0.786 / 0.649 | 223 ms | 6.4 s |
+| sizly (12) | nomic (ship) | 0.417 / 0.361 | **0.833 / 0.674** | 207 ms | 75.4 s |
+| sizly (12) | MiniLM | 0.833 / 0.688 | 0.833 / 0.632 | 187 ms | 1.7 s |
+
+- Decision: nomic stays the shipping default (hybrid strictly ≥ on both
+  repos); MiniLM documented as the fast fallback (D33). Honest note: nomic's
+  isolated dense channel is much weaker than MiniLM's on real repos — the
+  hybrid union + CE blend is what carries it.
+- Graph expansion delta, shipping pipeline (§13 gate: recall non-decreasing):
+  flask recall 0.857→0.857 (Δ 0.000 ✓), MRR 0.821→0.768 (−0.054);
+  sizly recall 0.833→0.833 (Δ 0.000 ✓), MRR 0.660→0.674 (+0.014). Kept ON (D34).
+- p95 warm hybrid stays under the 500 ms gate on both external repos (207–261 ms).
+
+## 2026-07-04 — Phase 5 — Golden Test replay on real history (flask, 30 commits)
+
+eval/golden_replay.py: last 30 first-parent commits of pallets/flask checked
+out oldest→newest with incremental sync after each; final state vs
+from-scratch rebuild at the same HEAD. **PASS — all 7 projections identical**
+(active blobs, files@HEAD, chunks, FTS, symbols, edges, embeddings).
+Incremental replay 5.8 s total (~0.18 s/commit); rebuild 0.28 s.

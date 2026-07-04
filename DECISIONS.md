@@ -403,3 +403,41 @@ nl_hard queries out of their top-5. Kept EMBED_TEXT_VERSION=1 / the D25 text
 unchanged; q28 stays the documented honest limitation (README, EVAL_LOG).
 Infrastructure kept from the attempt: the embed-tag invalidation (D30b)
 makes any future text-version change safe to ship.
+
+## D33 — Embedding model re-benchmark on real external repos: nomic stays default (Phase 5 §3a)
+Fixture parity (D28) demanded a real-repo rematch. eval/external/bench_external.py
+on flask (616 chunks, 14 gold queries) and sizly (216 chunks, 12 queries),
+file-level hits, CPU:
+
+| repo | model | vector-only r@5 / MRR | **hybrid r@5 / MRR** | embed time |
+|---|---|---|---|---|
+| flask | nomic-embed-text-v1.5 | 0.357 / 0.310 | **0.857 / 0.768** | 237.7 s |
+| flask | all-MiniLM-L6-v2 | 0.786 / 0.583 | 0.786 / 0.649 | 6.4 s |
+| sizly | nomic-embed-text-v1.5 | 0.417 / 0.361 | **0.833 / 0.674** | 75.4 s |
+| sizly | all-MiniLM-L6-v2 | 0.833 / 0.688 | 0.833 / 0.632 | 1.7 s |
+
+Two honest surprises: (1) nomic's ISOLATED vector channel is far weaker than
+MiniLM's on real repos (0.36–0.42 vs 0.79–0.83) — the opposite of the
+fixture ranking (D25/D28); (2) the FULL pipeline still ranks nomic first on
+both repos (flask +0.071 recall / +0.119 MRR; sizly tie recall, +0.042 MRR):
+the D27 channel-union + CE/vector rank blend compensates for weak isolated
+dense rankings, and nomic's vectors still contribute more useful *candidates*
+to the union than they lose in ordering. Decision: **ship nomic as default**
+(§15 priority: retrieval quality over install friction) — the user-visible
+metric is the hybrid, and it is strictly better or equal everywhere measured.
+MiniLM stays one config line away (`embed_model`; embed-tag invalidation D30b
+makes switching safe) for CPU-frugal users: 30–40× faster embedding at
+0–7 pts hybrid recall cost. Recorded verbatim even though it complicates the
+D25 story — the fixture benchmark overstated nomic's dense-channel edge.
+
+## D34 — Graph expansion stays ON: flask/sizly delta measured (Phase 5 §3b)
+The fixture delta (0.000) was uninformative. External measurement (same runs
+as D33, shipping pipeline): recall@5 delta 0.000 on BOTH repos (flask
+0.857→0.857, sizly 0.833→0.833); MRR: flask 0.821 (OFF) → 0.768 (ON)
+= −0.054, sizly 0.660 (OFF) → 0.674 (ON) = +0.014. The §13 gate binds
+recall (non-decreasing ✓). Mechanism of the flask MRR dip: expansion
+attaches discounted (×0.6) neighbors of top hits, which can outrank a
+lower-scored relevant chunk inside the top-5 without evicting it. Kept ON:
+recall is gate-protected, the MRR effect is small and sign-mixed, and
+expansion is the feature that surfaces callers/callees context agents
+actually use (Phase 4 smoke). Config flag remains for A/B.
