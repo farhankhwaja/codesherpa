@@ -32,6 +32,9 @@ repograph = "repograph.cli:main"
 [tool.setuptools.packages.find]
 include = ["repograph*"]
 
+[tool.setuptools.package-data]
+"repograph.graph" = ["queries/*.scm"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
