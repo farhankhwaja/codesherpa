@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "repograph"
+version = "0.0.1"
+description = "A git-native, self-updating structural memory for your codebase. Index once, stay fresh forever, spend far fewer tokens on context."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "repograph contributors" }]
+# NOTE: runtime dependencies are added per phase, when first used, strictly
+# from the approved stack in CLAUDE.md §6. Phase 0 needs stdlib only.
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "hypothesis>=6.100",
+]
+
+[project.scripts]
+repograph = "repograph.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["repograph*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
