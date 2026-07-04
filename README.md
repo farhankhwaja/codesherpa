@@ -5,7 +5,7 @@ once, stay fresh forever, and let any LLM agent retrieve exactly the code
 context it needs over MCP — function-level chunks under a token budget
 instead of grep-and-read-the-whole-file.
 
-[![CI](https://github.com/farhankhwaja/codesherpa/actions/workflows/ci.yml/badge.svg)](https://github.com/farhankhwaja/codesherpa/actions/workflows/ci.yml)
+[![CI](https://github.com/farhankhwaja/codesherpa/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/farhankhwaja/codesherpa/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 <!-- TODO after PyPI publish: [![PyPI](https://img.shields.io/pypi/v/codesherpa)](https://pypi.org/project/codesherpa/) -->
