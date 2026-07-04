@@ -19,6 +19,7 @@ merge to main. It may never be deleted, skipped, or weakened.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import shutil
 import subprocess
@@ -271,6 +272,35 @@ def _project_edges(store: SQLiteIndexStore) -> tuple[tuple, ...]:
     return tuple(tuple(row) for row in rows)
 
 
+def _project_embeddings(store: SQLiteIndexStore) -> dict[str, list[tuple[str, int, str]]]:
+    """Phase 3 extension (ownership exception per the note below / D14).
+
+    Per active blob: (chunk_id, dim, sha256 of the packed vector bytes) of
+    every cached embedding — i.e. presence, dimension, and exact bytes.
+    Exact-byte comparison is valid because the golden flows embed through the
+    permanent cache with a deterministic encoder (the cache guarantees a
+    chunk is embedded at most once, and identical chunk text must yield an
+    identical cached vector); the hash only keeps assertion diffs readable.
+    If a future golden flow ever uses a nondeterministic encoder, hash
+    presence/dim still hold — bytes would then need relaxing, recorded here.
+    """
+    rows = store.conn.execute(
+        """
+        SELECT c.blob_hash, e.chunk_id, e.dim, e.vector
+        FROM embeddings e
+        JOIN chunks c ON c.chunk_id = e.chunk_id
+        JOIN blobs b ON b.blob_hash = c.blob_hash AND b.active = 1
+        ORDER BY c.blob_hash, e.chunk_id
+        """
+    ).fetchall()
+    out: dict[str, list[tuple[str, int, str]]] = {}
+    for row in rows:
+        out.setdefault(row["blob_hash"], []).append(
+            (row["chunk_id"], row["dim"], hashlib.sha256(row["vector"]).hexdigest())
+        )
+    return out
+
+
 # The compared projection, one extractor per logical table. Golden equality is
 # defined over the ACTIVE rows only: incremental DBs legitimately retain
 # inactive rows (soft deactivation is the design).
@@ -288,6 +318,9 @@ GOLDEN_PROJECTION: dict[str, callable] = {
     "fts_of_active_chunks": _project_fts,
     "symbols": _project_symbols,
     "edges": _project_edges,
+    # Phase 3 (retrieval worktree, ownership exception): embeddings of active
+    # blobs' chunks. Exercised non-vacuously by tests/test_golden_embeddings.py.
+    "embeddings_of_active_blobs": _project_embeddings,
 }
 
 
