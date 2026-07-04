@@ -23,3 +23,13 @@
 {"id": "q23", "type": "stacktrace", "query": "TypeError: Cannot read properties of undefined (reading 'title')\n    at TaskItem (webclient/src/components/TaskItem.tsx)", "expected_files": ["webclient/src/components/TaskItem.tsx"], "expected_symbols": ["TaskItem"]}
 {"id": "q24", "type": "stacktrace", "query": "Traceback (most recent call last):\n  File \"pyserver/routes/users.py\", in create_user\n  File \"pyserver/validators.py\", in validate_email\nValueError: invalid email: 'not-an-email'", "expected_files": ["pyserver/validators.py", "pyserver/routes/users.py"], "expected_symbols": ["validate_email", "create_user"]}
 {"id": "q25", "type": "stacktrace", "query": "Error: request failed after 3 retries: /api/login\n    at fetchWithRetry (webclient/src/http.ts)", "expected_files": ["webclient/src/http.ts"], "expected_symbols": ["fetchWithRetry"]}
+{"id": "q26", "type": "nl_hard", "query": "why does the app forget I'm logged in after a page refresh", "expected_files": ["webclient/src/auth.ts"], "expected_symbols": ["getToken", "storeToken"]}
+{"id": "q27", "type": "nl_hard", "query": "make a heading usable as part of a web link", "expected_files": ["pyserver/utils/text.py"], "expected_symbols": ["slugify"]}
+{"id": "q28", "type": "nl_hard", "query": "avoid asking the backend twice for the same person's details", "expected_files": ["pyserver/cache.py"], "expected_symbols": ["MemoCache"]}
+{"id": "q29", "type": "nl_hard", "query": "ping an external service whenever someone finishes an item", "expected_files": ["pyserver/services/notifications.py"], "expected_symbols": ["send_task_notification"]}
+{"id": "q30", "type": "nl_hard", "query": "confirm the secret phrase a member typed is the same one we saved", "expected_files": ["pyserver/auth.py"], "expected_symbols": ["verify_password"]}
+{"id": "q31", "type": "nl_hard", "query": "let parts of the ui react when the collection of todos changes", "expected_files": ["webclient/src/store.ts"], "expected_symbols": ["TaskStore", "subscribe"]}
+{"id": "q32", "type": "nl_hard", "query": "ranking urgency levels for work items", "expected_files": ["pyserver/models/task.py"], "expected_symbols": ["TaskPriority"]}
+{"id": "q33", "type": "nl_hard", "query": "cut off overly long labels with a trailing dots character in the browser ui", "expected_files": ["webclient/src/utils/format.ts"], "expected_symbols": ["formatTitle"]}
+{"id": "q34", "type": "decoy", "query": "when does a user lookup stop being remembered", "expected_files": ["pyserver/cache.py"], "expected_symbols": ["MemoCache"]}
+{"id": "q35", "type": "decoy", "query": "send the owner an email when their task is completed", "expected_files": ["pyserver/services/notifications.py"], "expected_symbols": ["send_task_notification"]}
