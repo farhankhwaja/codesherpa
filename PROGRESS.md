@@ -30,9 +30,9 @@ Nothing. Post-ship candidates live in the README roadmap and TODO(upgrade)
 markers.
 
 ## Blocked / open questions
-- BLOCKED.md B3 (updated): compact-first shipped + v2 measured; raw-token
-  ≥50 % target still unmet. Human decides: ship with the measured profile
-  (README reports it verbatim) or hold the release on that number.
+None. B3 resolved by the human: SHIP with the measured v2 profile (D40);
+the ≥50 % raw-token target stays recorded as missed and moves to the
+roadmap as a large-repo re-measurement. BLOCKED.md deleted per charter.
 
 ## Notes for the next session
 - Names: `pip install codesherpa` → command `sherpa` → `import codesherpa`;

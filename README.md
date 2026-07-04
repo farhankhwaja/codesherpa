@@ -174,6 +174,8 @@ choice), `EVAL_LOG.md` (append-only benchmark record). See CONTRIBUTING.md.
 - `sherpa bench` CLI wrapper; per-blob graph extraction cache
   (`TODO(upgrade)` in graph/index.py)
 - Multi-ref tracking (index all local branches, not just HEAD)
+- Re-measure the ≥50 % raw-token-reduction target on large-repo agent
+  benchmarks (the miss on small/mid repos is recorded above)
 - Optional `watchdog` fs-watcher for uncommitted edits
 
 ## License

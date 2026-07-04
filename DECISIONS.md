@@ -590,3 +590,17 @@ agent to expand() only the 1–2 hits that matter. Response-envelope trimming
 untouched (its search() default stays 4000 — this is MCP-layer presentation).
 Measured in the A/B v2 rerun on the same 21 frozen tasks (EVAL_LOG; v1 entry
 untouched per the harness honesty rules).
+
+## D40 — B3 resolved by the human: SHIP with the measured v2 profile (post-Phase-6)
+Final human decision on BLOCKED B3: ship. The §13 ≥50 % raw-token-reduction
+threshold is NOT lowered and stays recorded as **MISSED** in EVAL_LOG and
+the README (language unchanged, per instruction). Rationale for the record:
+`tokens_total` in headless mode is dominated by client-side cache re-reads
+and mismeasures real cost; the operative measures are billing-weighted cost
+(−52.7 % on sizly, v2), whole-file reads (−55/−61 %), and solve rate
+(20/21 vs 19/21) — all favorable with the D39 compact-first responses. A
+≥50 % raw-token reduction remains an open target, to be re-measured on
+large-repo benchmarks where navigation dominates harder (roadmap item).
+BLOCKED.md is deleted per its own charter (it exists only while something
+needs the human); B3's full history stays in git, EVAL_LOG (v1+v2 entries),
+verification/ab/ab-results*.md, and D35/D39/this entry.
