@@ -52,14 +52,21 @@ Encoder = Callable[[list[str]], list[list[float]]]
 """Batch text -> vectors. Injected in tests; real one wraps SentenceTransformer."""
 
 ENCODER_MAX_CHARS = 8192
-"""Hard cap on characters fed to the encoder per text (~2k BPE tokens).
+"""Pre-truncation cap on characters per text (keeps tokenization cheap).
 
-The tokenizer already truncates each text to the model's max_seq_len, but a
-length-sorted batch of near-max-length texts costs attention memory of
-batch x heads x seq^2 — measured >14 GB RSS on CPU when 287 KB single-line
-chunks reached a batch of 32 (D38). Chunkers bound chunk size too; this cap
-is the engine-level guarantee that holds for ANY input. All legitimate cAST
-chunks are far below it, so no cached vector changes."""
+NOT the memory bound — dense JSON tokenizes at ~2.6 chars/token, so 8192
+chars can still be >3k tokens (D38-revised). The real bound is
+:data:`ENCODER_MAX_TOKENS`."""
+
+ENCODER_MAX_TOKENS = 1024
+"""Hard clamp on the model's max sequence length (D38-revised).
+
+Attention memory is batch x heads x seq^2: an instrumented run measured ONE
+batch of 32 char-capped dense-JSON texts (3,093 tokens each) taking RSS from
+1.6 GB to 10.1 GB; the same batch clamped to 1024 tokens completes in 6.7 s
+at 4.0 GB total. Typical cAST code chunks are ~450 BPE tokens, far below the
+clamp, so their vectors are unchanged; only pathological data-file chunks
+are tail-truncated."""
 
 
 def _normalize(vector: Sequence[float]) -> list[float]:
@@ -90,6 +97,9 @@ class EmbeddingEngine:
         self._cache_dir = cache_dir or default_cache_dir()
         self._encoder = encoder
         self._trust_remote_code = trust_remote_code
+        self._model_for_tests = None
+        """The loaded SentenceTransformer, exposed so tests can assert the
+        max_seq_length clamp (D38-revised); None with an injected encoder."""
         self.computed_count = 0
         """Number of embeddings actually computed (cache misses) this session."""
 
@@ -114,6 +124,14 @@ class EmbeddingEngine:
                 # start must not stall on hub HTTP checks (Phase 5 §3f)
                 local_files_only=model_is_cached(self._cache_dir, self.model_name),
             )
+            # memory bound (D38-revised): attention is batch x heads x seq^2,
+            # and a char cap alone admits >3k-token dense-JSON texts
+            try:
+                current = int(model.max_seq_length or ENCODER_MAX_TOKENS)
+            except (TypeError, ValueError):
+                current = ENCODER_MAX_TOKENS
+            model.max_seq_length = min(current, ENCODER_MAX_TOKENS)
+            self._model_for_tests = model
 
             def encode(texts: list[str]) -> list[list[float]]:
                 return model.encode(
