@@ -1,8 +1,10 @@
 """``python -m repograph.mcp_server [repo_path]`` — run the stdio server.
 
-Wiring depends on the real store (Phase 1) and retrieval pipeline (Phase 3);
-until those merge, this entry point reports exactly what is missing instead
-of serving mock data (CLAUDE.md §2.5).
+Startup is deliberately cheap (Phase 5 §3e): it opens the EXISTING index and
+serves immediately. No sync, no embedding, no model download ever happens
+inside the MCP handshake — ``repograph init``/``sync`` own those. If the
+index has missing embeddings the server still serves (lexical + symbol
+channels) and reports a warming status from its tools.
 """
 
 from __future__ import annotations
@@ -16,17 +18,23 @@ from repograph.mcp_server.server import create_server
 def main(argv: list[str] | None = None) -> int:
     args = argv if argv is not None else sys.argv[1:]
     repo = Path(args[0]).resolve() if args else Path.cwd()
+
+    from repograph.gitlayer.repo import NotARepositoryError
+    from repograph.retrieve import IndexNotBuiltError, build_retriever
+
     try:
-        from repograph.retrieve import build_retriever  # type: ignore[attr-defined]
-    except (ImportError, AttributeError):
+        retriever, store = build_retriever(str(repo))
+    except NotARepositoryError as exc:
         print(
-            "repograph-mcp: the retrieval pipeline (repograph.retrieve.build_retriever) "
-            "is not available yet — it lands with Phase 3. The MCP server itself is "
-            "ready; wire it via repograph.mcp_server.create_server(retriever, repo).",
+            f"repograph serve: {exc}\n"
+            "repograph serve: point it at a git repository "
+            "(or run `git init` there first).",
             file=sys.stderr,
         )
         return 2
-    retriever, store = build_retriever(str(repo))
+    except IndexNotBuiltError as exc:
+        print(f"repograph serve: {exc}", file=sys.stderr)
+        return 2
     create_server(retriever, repo, store=store).run()
     return 0
 

@@ -172,3 +172,84 @@ golden-embeddings, MCP stdio integration). [Correction, same day — verifier
 finding: that run predated the `build_retriever` commit, at which the
 Phase-4 serve probe expired (272/1 at commit 150a801). Fixed per D29; the
 suite count after the fix is recorded in the verifier report.]
+
+## 2026-07-04 — Phase 5 — external-repo init end-to-end (branch phase-5)
+
+`repograph init` cold, CPU-only Apple M-series, shipping defaults
+(nomic-embed-text-v1.5, cached model, D30 wiring: init owns the embedding
+pass with progress output). Transcripts: verification/phase5/.
+
+| repo | tracked files | LOC | blobs | chunks | sync (parse+store+graph) | embed | total cold init | index size | repo .git |
+|---|---|---|---|---|---|---|---|---|---|
+| pallets/flask @HEAD | 236 | 38,330 | 224 | 616 | 0.32 s | ~228 s | **231.5 s** | 13.0 MB | 13 MB |
+| sizly @1c01da6 | 104 | 29,193 | 95 | 216 | 0.18 s | ~71 s | **73.7 s** | 5.9 MB | 4.5 MB |
+
+- No crashes on either repo (incl. .jsx via the javascript grammar, rst/md
+  via line-window fallback).
+- 5 sample queries per repo: flask 5/5 correct file at rank 1;
+  sizly 5/5 correct file in top-5 (3/5 at rank 1). Router-path queries
+  0–70 ms with no model load.
+- MCP cold handshake with built index: regression-tested < 5 s
+  (tests/test_serve_startup.py, offline env).
+
+## 2026-07-04 — Phase 5 — external embedder re-benchmark + expansion delta (branch phase-5)
+
+eval/external/bench_external.py, file-level hits, CPU (full tables + decision
+reasoning in DECISIONS.md D33/D34):
+
+| repo (queries) | model | vector-only r@5/MRR | hybrid r@5/MRR | hybrid p95 | embed |
+|---|---|---|---|---|---|
+| flask (14) | nomic (ship) | 0.357 / 0.310 | **0.857 / 0.768** | 261 ms | 237.7 s |
+| flask (14) | MiniLM | 0.786 / 0.583 | 0.786 / 0.649 | 223 ms | 6.4 s |
+| sizly (12) | nomic (ship) | 0.417 / 0.361 | **0.833 / 0.674** | 207 ms | 75.4 s |
+| sizly (12) | MiniLM | 0.833 / 0.688 | 0.833 / 0.632 | 187 ms | 1.7 s |
+
+- Decision: nomic stays the shipping default (hybrid strictly ≥ on both
+  repos); MiniLM documented as the fast fallback (D33). Honest note: nomic's
+  isolated dense channel is much weaker than MiniLM's on real repos — the
+  hybrid union + CE blend is what carries it.
+- Graph expansion delta, shipping pipeline (§13 gate: recall non-decreasing):
+  flask recall 0.857→0.857 (Δ 0.000 ✓), MRR 0.821→0.768 (−0.054);
+  sizly recall 0.833→0.833 (Δ 0.000 ✓), MRR 0.660→0.674 (+0.014). Kept ON (D34).
+- p95 warm hybrid stays under the 500 ms gate on both external repos (207–261 ms).
+
+## 2026-07-04 — Phase 5 — Golden Test replay on real history (flask, 30 commits)
+
+eval/golden_replay.py: last 30 first-parent commits of pallets/flask checked
+out oldest→newest with incremental sync after each; final state vs
+from-scratch rebuild at the same HEAD. **PASS — all 7 projections identical**
+(active blobs, files@HEAD, chunks, FTS, symbols, edges, embeddings).
+Incremental replay 5.8 s total (~0.18 s/commit); rebuild 0.28 s.
+
+## 2026-07-04 — Phase 5 — A/B token benchmark (sizly primary + fixture) — TARGET MISSED, recorded as-is
+
+Full report + methodology + judgment calls: verification/ab/ab-results.md.
+21 tasks (11 sizly from eval/ab_tasks_sizly.md, 10 fixture from
+eval/ab_tasks.md, frozen before arm A), fresh `claude -p` (sonnet) session
+per task per arm, ground truth never shown to agents.
+
+| | solve rate | mean tokens_total (solved) | mean cost | tool calls | file reads |
+|---|---|---|---|---|---|
+| fixture A | 10/10 | 300,849 | $0.506 | 28.9 | 15.1 |
+| fixture B (repograph) | 10/10 | 510,731 (−69.8 %) | $0.383 (+24.4 %) | 14.9 (+48 %) | 4.7 (+69 %) |
+| sizly A | 9/11 | 608,948 | $0.910 | 33.6 | 14.6 |
+| sizly B (repograph) | **11/11** | 595,789 (+2.2 %) | $0.985 (−8.3 %) | 29.5 (+12 %) | 8.8 (+39 %) |
+
+- §13 target ≥50 % token reduction on solved tasks: **NOT MET** (fixture
+  −69.8 %, sizly +2.2 %). Filed in BLOCKED.md per §13; no reruns after
+  seeing results.
+- Solve-rate guardrail B ≥ A: PASS — B solved both tasks A failed (sizly D2
+  timed out in A at 20 min/107 tool calls; A's D5 stalled asking for shell
+  permission). MCP adoption: sizly 11/11 tasks, fixture 7/10.
+- Honest mechanism note: repograph replies are token-dense packed chunks and
+  every headless turn re-reads the growing context (cache reads dominate
+  tokens_total); B takes fewer turns but each is fatter. Billing-weighted
+  cost lands within ±25 % of arm A.
+
+## 2026-07-04 — Phase 5 — pre-merge obligations
+
+- GOLDEN_DEEP=1 soak (randomized, max_examples 25): **PASS** on branch
+  phase-5 (post-D30 code), this workstation.
+- CI workflow added (.github/workflows/ci.yml): venv is ACTIVE for the
+  suite (console-script requirement), model caches cached, golden test run
+  explicitly.

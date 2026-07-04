@@ -327,3 +327,154 @@ nonzero exit, no .repograph created), no server launch, no repo mutation.
 Real serving is covered by the MCP stdio integration test. EVAL_LOG's
 "273 passed at this commit" line was also stale (the suite run predated the
 `build_retriever` commit); corrected in place with a note.
+
+## D30 — Embedding computation moved out of server startup into init/sync (Phase 5)
+Observed in the Phase 4 human smoke: `build_retriever` synced AND embedded the
+whole repo before the MCP handshake, so a first `search_code` stalled ~1.5 min
+(lazy model load) and a cold init embedded for ~2.5 min in silence. New
+ownership: `repograph init`/`repograph sync` run the embedding pass
+(repograph/retrieve/warm.py, with progress output — \r on a TTY, 10 % lines
+otherwise); the production `build_retriever` only OPENS the existing index
+(no sync, no embed, no model import) and raises `IndexNotBuiltError` when
+there is none, so `repograph serve` exits 2 with "run `repograph init`"
+instead of building an index as a side effect. While embeddings are missing
+the server still serves (BM25 + symbol + router channels) and every
+`search_code`/`index_status` response carries a `warming` field with the
+missing-embedding count and a "run `repograph sync`" hint — the amendment's
+"warming status" option, chosen over in-server async embedding to keep the
+serving process single-writer (the store connection is not thread-safe and
+embedding contends for the same SQLite file the server reads).
+Related choices:
+(a) quiet syncs (= git hooks) embed incrementally but pass
+`require_cached_model=True`: a hook never downloads a model; first downloads
+belong to a foreground init/sync. Hook cost when models are cached: one model
+load (~2–8 s) only when new chunks actually exist, else zero.
+(b) Embeddings are invalidated by an `embed_tag` = model name + text version
+recorded in `meta`: switching `embed_model` (or bumping EMBED_TEXT_VERSION)
+wipes the old vectors and the vec0 dim pin instead of silently mixing vector
+spaces in one KNN table (previously a dim mismatch raised at put time; a
+same-dim model switch would have gone completely undetected).
+(c) `sentence_transformers` loads pass `local_files_only=True` whenever the
+model directory already has a snapshot in ~/.cache/repograph/models (checked
+against installed ST 5.6.0 signatures): warm starts perform zero network
+calls (§3f).
+(d) `repograph search` implemented (it needs exactly this read-only wiring;
+required for Phase 5 external-repo transcripts); the CLI
+unimplemented-command probe retargeted `search` → `bench` per the D5
+precedent — assertions unchanged.
+
+## D31 — Router token regex stays ASCII-only (Phase 5 §3d decision)
+`_TOKEN_RE = [A-Za-z_][A-Za-z0-9_]{2,}` deliberately does not use `\w`.
+Reasons: (1) the router is a *precision* device — it bypasses dense retrieval
+entirely, so a false identifier match costs an entire query's quality, while
+a miss only costs the <50 ms fast path (the query still gets full hybrid
+retrieval, including FTS5, which handles non-ASCII text fine); (2) the §7.2
+target languages (Py/TS/JS/TSX) overwhelmingly use ASCII identifiers in
+public code, and the symbol table lookup is exact-match, so widening only
+helps repos with non-ASCII *definitions* — rare enough that we have no
+corpus to validate against; (3) `\w` in Python matches digits/marks across
+every script, which would promote ordinary words of non-English prose
+queries to identifier candidates and re-open the "connect" hijack class D21
+guarded against, now in scripts where the `_looks_like_identifier`
+morphology heuristics (camelCase, snake_case) do not apply. Revisit on a
+real user report with a concrete repo; the change would be a one-line regex
+widening plus morphology rules per script. Exploratory check: emoji/CJK
+identifiers index and retrieve via FTS/vector paths without crashing (Phase
+2 verifier attack + this phase's external-repo runs).
+
+## D32 — q28 fix attempt: docstring-weighted embedding text REJECTED (Phase 5 §3c)
+q28 ("avoid asking the backend twice for the same person's details" →
+pyserver/cache.py MemoCache) is the sole official-gate miss. Two variants
+measured against the current text (breadcrumb + code), nomic, vector-only
+ranking over the fixture's 34 real chunks, 35 gold queries:
+
+| variant | recall@5 | MRR@5 | q28 rank | side effects |
+|---|---|---|---|---|
+| A current (ship) | 0.943 | 0.824 | 17 | — |
+| B doc lines prepended to text | 0.943 | 0.795 | 17 | q32 rank 5→9 |
+| C dual vectors (full + breadcrumb/doc summary), max-pool | 0.914 | 0.836 | 6 | q26→6, q32→8: net recall DOWN |
+
+Diagnosis: the chunk's breadcrumb already contains the module docstring line
+("Tiny in-memory TTL cache used for hot lookups (e.g. users by id)"), and a
+doc-only summary vector still scores 0.572 vs the winner's 0.597 on q28 —
+the miss is an embedder-semantics ceiling ("asking twice" ↛ "TTL cache"),
+not a text-shaping problem, and every reshaping that helps q28 pushes other
+nl_hard queries out of their top-5. Kept EMBED_TEXT_VERSION=1 / the D25 text
+unchanged; q28 stays the documented honest limitation (README, EVAL_LOG).
+Infrastructure kept from the attempt: the embed-tag invalidation (D30b)
+makes any future text-version change safe to ship.
+
+## D33 — Embedding model re-benchmark on real external repos: nomic stays default (Phase 5 §3a)
+Fixture parity (D28) demanded a real-repo rematch. eval/external/bench_external.py
+on flask (616 chunks, 14 gold queries) and sizly (216 chunks, 12 queries),
+file-level hits, CPU:
+
+| repo | model | vector-only r@5 / MRR | **hybrid r@5 / MRR** | embed time |
+|---|---|---|---|---|
+| flask | nomic-embed-text-v1.5 | 0.357 / 0.310 | **0.857 / 0.768** | 237.7 s |
+| flask | all-MiniLM-L6-v2 | 0.786 / 0.583 | 0.786 / 0.649 | 6.4 s |
+| sizly | nomic-embed-text-v1.5 | 0.417 / 0.361 | **0.833 / 0.674** | 75.4 s |
+| sizly | all-MiniLM-L6-v2 | 0.833 / 0.688 | 0.833 / 0.632 | 1.7 s |
+
+Two honest surprises: (1) nomic's ISOLATED vector channel is far weaker than
+MiniLM's on real repos (0.36–0.42 vs 0.79–0.83) — the opposite of the
+fixture ranking (D25/D28); (2) the FULL pipeline still ranks nomic first on
+both repos (flask +0.071 recall / +0.119 MRR; sizly tie recall, +0.042 MRR):
+the D27 channel-union + CE/vector rank blend compensates for weak isolated
+dense rankings, and nomic's vectors still contribute more useful *candidates*
+to the union than they lose in ordering. Decision: **ship nomic as default**
+(§15 priority: retrieval quality over install friction) — the user-visible
+metric is the hybrid, and it is strictly better or equal everywhere measured.
+MiniLM stays one config line away (`embed_model`; embed-tag invalidation D30b
+makes switching safe) for CPU-frugal users: 30–40× faster embedding at
+0–7 pts hybrid recall cost. Recorded verbatim even though it complicates the
+D25 story — the fixture benchmark overstated nomic's dense-channel edge.
+
+## D34 — Graph expansion stays ON: flask/sizly delta measured (Phase 5 §3b)
+The fixture delta (0.000) was uninformative. External measurement (same runs
+as D33, shipping pipeline): recall@5 delta 0.000 on BOTH repos (flask
+0.857→0.857, sizly 0.833→0.833); MRR: flask 0.821 (OFF) → 0.768 (ON)
+= −0.054, sizly 0.660 (OFF) → 0.674 (ON) = +0.014. The §13 gate binds
+recall (non-decreasing ✓). Mechanism of the flask MRR dip: expansion
+attaches discounted (×0.6) neighbors of top hits, which can outrank a
+lower-scored relevant chunk inside the top-5 without evicting it. Kept ON:
+recall is gate-protected, the MRR effect is small and sign-mixed, and
+expansion is the feature that surfaces callers/callees context agents
+actually use (Phase 4 smoke). Config flag remains for A/B.
+
+## D35 — A/B benchmark: execution choices and the target-miss handling (Phase 5)
+Choices made before any run: model `sonnet` in both arms (identical-settings
+rule; sized like real agent deployments); max-turns 40 + 20-min wall cap
+(the cap converts a runaway session into an honest unsolved row — arm A hit
+it once, 107 tool calls without an answer); `tokens_total` counts all input
+variants incl. cache reads plus output (the CLI's cumulative session usage —
+the harness's "input + output"), with fresh-token and billing-cost columns
+reported alongside so no framing hides the raw number. Grading: programmatic
+key-symbol/path match over the final answer, manual review of every row, and
+one pre-declared judgment call applied symmetrically (an "…my earlier answer
+stands" final message counts iff the key was stated earlier in-session;
+happened once per arm). Ground-truth stripping is code, not discipline:
+parse_tasks() removes HTML comments and was asserted against the leak
+keywords before arm A ran.
+Result: the §13 ≥50 % token-reduction target was missed (fixture −69.8 %,
+sizly +2.2 %) while the solve-rate guardrail passed with B strictly better
+(21/21 vs 19/21). Handling per the governing texts: numbers recorded
+verbatim in EVAL_LOG (§10 Phase 5 "record honestly whatever the numbers
+are"), the gap filed as BLOCKED.md B3 (§13), zero post-measurement reruns
+or tuning (ab_harness honesty rules), and the phase proceeded to merge under
+the human's explicit Phase 5 amendment "Record whatever the numbers are — no
+cherry-picking" — read as pre-authorizing honest-miss-and-continue rather
+than halting the mandated Phase 5+6 execution. The README's benchmark
+section reports the miss in plain language and claims only what held up:
+higher solve rate, fewer tool calls/file reads, cost parity.
+
+## D36 — recent_changes: bare ISO dates pinned to UTC midnight (Phase 5)
+The pre-merge full-suite run failed `test_since_iso_date` at 19:53 IST after
+passing all day: git's approxidate reads a bare `--since=2024-01-07` as that
+date at the CURRENT wall-clock time, so `get_recent_changes("2024-01-07")`
+silently excluded same-day commits depending on when/where it ran — a
+correctness bug in the code (its contract says "commits on or after the
+date"), not in the test (§2.1: code fixed, test untouched). Bare dates are
+now normalized to `<date>T00:00:00Z`; full ISO datetimes pass through
+verbatim. UTC (not local) midnight so the same query returns the same
+commits on every machine.

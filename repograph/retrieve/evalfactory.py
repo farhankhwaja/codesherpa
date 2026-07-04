@@ -15,13 +15,19 @@ from pathlib import Path
 from repograph.contracts.retrieval_contract import Retriever
 from repograph.contracts.types import PackedContext, RetrievalSource
 from repograph.embed.engine import EmbeddingEngine
+from repograph.gitlayer.repo import open_repo, repo_root
 from repograph.gitlayer.sync import default_db_path, sync
 from repograph.retrieve.config import RetrievalConfig
 from repograph.retrieve.pack import pack_results
 from repograph.retrieve.retriever import HybridRetriever
+from repograph.retrieve.warm import embed_index
 from repograph.store.sqlite_store import SQLiteIndexStore
 
 _MODES = ("hybrid", "bm25", "vector")
+
+
+class IndexNotBuiltError(RuntimeError):
+    """The repo has no .repograph/index.db yet — `repograph init` first."""
 
 
 class SingleChannelRetriever(HybridRetriever):
@@ -58,37 +64,49 @@ class SingleChannelRetriever(HybridRetriever):
         return pack_results(query, candidates, budget_tokens)
 
 
-def _index_and_embed(repo_path: str) -> tuple[SQLiteIndexStore, EmbeddingEngine, RetrievalConfig]:
-    """Sync ``repo_path`` (blobs, chunks, FTS, symbol graph) and embed every
-    active chunk through the permanent cache. Re-invocations only pay for
-    genuinely new chunks."""
-    root = Path(repo_path)
-    sync(root)
-    store = SQLiteIndexStore(default_db_path(root.resolve()))
-    config = RetrievalConfig()
-    embedder = EmbeddingEngine(
+def _wire(store: SQLiteIndexStore, config: RetrievalConfig) -> EmbeddingEngine:
+    return EmbeddingEngine(
         store,
         config.embed_model,
         batch_size=config.embed_batch_size,
         cache_dir=config.model_cache_dir,
         trust_remote_code=config.embed_trust_remote_code,
     )
-    chunks = [
-        c for blob in sorted(store.active_blobs()) for c in store.chunks_for_blob(blob)
-    ]
-    embedder.embed_chunks(chunks)
+
+
+def _index_and_embed(repo_path: str) -> tuple[SQLiteIndexStore, EmbeddingEngine, RetrievalConfig]:
+    """Sync ``repo_path`` (blobs, chunks, FTS, symbol graph) and embed every
+    active chunk through the permanent cache. Re-invocations only pay for
+    genuinely new chunks. Eval-harness wiring — the production server never
+    does this at startup (see build_retriever)."""
+    root = Path(repo_path)
+    sync(root)
+    store = SQLiteIndexStore(default_db_path(root.resolve()))
+    config = RetrievalConfig()
+    embedder = _wire(store, config)
+    embed_index(store, config=config, engine=embedder)
     return store, embedder, config
 
 
-def build_retriever(repo_path: str):
-    """Production wiring: ``(HybridRetriever, store)`` over the repo's index.
+def build_retriever(repo_path: str, config: RetrievalConfig | None = None):
+    """Production wiring: ``(HybridRetriever, store)`` over the repo's EXISTING index.
 
-    Consumed by ``python -m repograph.mcp_server`` and ``repograph serve``
-    (repograph/mcp_server/__main__.py imports it lazily by this exact name —
-    proposed by the graph-mcp worktree in PROGRESS.md).
+    Consumed by ``python -m repograph.mcp_server`` / ``repograph serve``.
+    Deliberately does NOT sync, embed, or load any model: index building and
+    embedding belong to ``repograph init``/``sync`` (Phase 5 §3e — the MCP
+    handshake must complete immediately, models load lazily on the first
+    dense query). Raises :class:`IndexNotBuiltError` when no index exists and
+    ``NotARepositoryError`` outside a git repo.
     """
-    store, embedder, config = _index_and_embed(repo_path)
-    return HybridRetriever(store, embedder, config=config), store
+    root = repo_root(open_repo(Path(repo_path)))
+    db = default_db_path(root)
+    if not db.is_file():
+        raise IndexNotBuiltError(
+            f"no index at {db} — run `repograph init` in the repository first"
+        )
+    store = SQLiteIndexStore(db)
+    cfg = config or RetrievalConfig()
+    return HybridRetriever(store, _wire(store, cfg), config=cfg), store
 
 
 def build_eval_retriever(repo_path: str, mode: str = "hybrid") -> Retriever:
