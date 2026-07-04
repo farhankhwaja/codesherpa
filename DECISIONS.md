@@ -327,3 +327,79 @@ nonzero exit, no .repograph created), no server launch, no repo mutation.
 Real serving is covered by the MCP stdio integration test. EVAL_LOG's
 "273 passed at this commit" line was also stale (the suite run predated the
 `build_retriever` commit); corrected in place with a note.
+
+## D30 — Embedding computation moved out of server startup into init/sync (Phase 5)
+Observed in the Phase 4 human smoke: `build_retriever` synced AND embedded the
+whole repo before the MCP handshake, so a first `search_code` stalled ~1.5 min
+(lazy model load) and a cold init embedded for ~2.5 min in silence. New
+ownership: `repograph init`/`repograph sync` run the embedding pass
+(repograph/retrieve/warm.py, with progress output — \r on a TTY, 10 % lines
+otherwise); the production `build_retriever` only OPENS the existing index
+(no sync, no embed, no model import) and raises `IndexNotBuiltError` when
+there is none, so `repograph serve` exits 2 with "run `repograph init`"
+instead of building an index as a side effect. While embeddings are missing
+the server still serves (BM25 + symbol + router channels) and every
+`search_code`/`index_status` response carries a `warming` field with the
+missing-embedding count and a "run `repograph sync`" hint — the amendment's
+"warming status" option, chosen over in-server async embedding to keep the
+serving process single-writer (the store connection is not thread-safe and
+embedding contends for the same SQLite file the server reads).
+Related choices:
+(a) quiet syncs (= git hooks) embed incrementally but pass
+`require_cached_model=True`: a hook never downloads a model; first downloads
+belong to a foreground init/sync. Hook cost when models are cached: one model
+load (~2–8 s) only when new chunks actually exist, else zero.
+(b) Embeddings are invalidated by an `embed_tag` = model name + text version
+recorded in `meta`: switching `embed_model` (or bumping EMBED_TEXT_VERSION)
+wipes the old vectors and the vec0 dim pin instead of silently mixing vector
+spaces in one KNN table (previously a dim mismatch raised at put time; a
+same-dim model switch would have gone completely undetected).
+(c) `sentence_transformers` loads pass `local_files_only=True` whenever the
+model directory already has a snapshot in ~/.cache/repograph/models (checked
+against installed ST 5.6.0 signatures): warm starts perform zero network
+calls (§3f).
+(d) `repograph search` implemented (it needs exactly this read-only wiring;
+required for Phase 5 external-repo transcripts); the CLI
+unimplemented-command probe retargeted `search` → `bench` per the D5
+precedent — assertions unchanged.
+
+## D31 — Router token regex stays ASCII-only (Phase 5 §3d decision)
+`_TOKEN_RE = [A-Za-z_][A-Za-z0-9_]{2,}` deliberately does not use `\w`.
+Reasons: (1) the router is a *precision* device — it bypasses dense retrieval
+entirely, so a false identifier match costs an entire query's quality, while
+a miss only costs the <50 ms fast path (the query still gets full hybrid
+retrieval, including FTS5, which handles non-ASCII text fine); (2) the §7.2
+target languages (Py/TS/JS/TSX) overwhelmingly use ASCII identifiers in
+public code, and the symbol table lookup is exact-match, so widening only
+helps repos with non-ASCII *definitions* — rare enough that we have no
+corpus to validate against; (3) `\w` in Python matches digits/marks across
+every script, which would promote ordinary words of non-English prose
+queries to identifier candidates and re-open the "connect" hijack class D21
+guarded against, now in scripts where the `_looks_like_identifier`
+morphology heuristics (camelCase, snake_case) do not apply. Revisit on a
+real user report with a concrete repo; the change would be a one-line regex
+widening plus morphology rules per script. Exploratory check: emoji/CJK
+identifiers index and retrieve via FTS/vector paths without crashing (Phase
+2 verifier attack + this phase's external-repo runs).
+
+## D32 — q28 fix attempt: docstring-weighted embedding text REJECTED (Phase 5 §3c)
+q28 ("avoid asking the backend twice for the same person's details" →
+pyserver/cache.py MemoCache) is the sole official-gate miss. Two variants
+measured against the current text (breadcrumb + code), nomic, vector-only
+ranking over the fixture's 34 real chunks, 35 gold queries:
+
+| variant | recall@5 | MRR@5 | q28 rank | side effects |
+|---|---|---|---|---|
+| A current (ship) | 0.943 | 0.824 | 17 | — |
+| B doc lines prepended to text | 0.943 | 0.795 | 17 | q32 rank 5→9 |
+| C dual vectors (full + breadcrumb/doc summary), max-pool | 0.914 | 0.836 | 6 | q26→6, q32→8: net recall DOWN |
+
+Diagnosis: the chunk's breadcrumb already contains the module docstring line
+("Tiny in-memory TTL cache used for hot lookups (e.g. users by id)"), and a
+doc-only summary vector still scores 0.572 vs the winner's 0.597 on q28 —
+the miss is an embedder-semantics ceiling ("asking twice" ↛ "TTL cache"),
+not a text-shaping problem, and every reshaping that helps q28 pushes other
+nl_hard queries out of their top-5. Kept EMBED_TEXT_VERSION=1 / the D25 text
+unchanged; q28 stays the documented honest limitation (README, EVAL_LOG).
+Infrastructure kept from the attempt: the embed-tag invalidation (D30b)
+makes any future text-version change safe to ship.
