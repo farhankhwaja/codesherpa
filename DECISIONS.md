@@ -542,3 +542,40 @@ Related cleanup found during the same investigation: the rename sed turned
 index dir became unignored and the rename commit accidentally tracked
 7.5 MB+ of index binaries. Removed from tracking; `.repograph/` re-ignored
 permanently; `sherpa init` now warns when a legacy `.repograph/` dir exists.
+
+## D38-final — Corrected diagnosis: token-level clamp closes the memory hole (Phase 6)
+D38's first fix (byte-cap fallback chunks + CHAR-cap encoder input) did not
+close the hole: a clean-clone `sherpa init` still ran away (10–15.5 GB RSS,
+reproduced live). Named-culprit instrumentation on the real engine path
+(per encode call: chunk ids, paths, byte length, TOKENIZED length, current
+RSS via ps before/after) identified the mechanism exactly:
+
+- The char cap held (max 8,209 chars/text) but dense JSON tokenizes at
+  ~2.6 chars/token, so texts reached **3,093 tokens**; ONE batch of 32 such
+  texts took RSS 1.6 → 10.1 GB in a single forward pass (attention =
+  batch × heads × seq²). A character cap is the WRONG UNIT.
+- Verified independently on the trust_remote_code path: after clamping,
+  `model.tokenize` of 8,192 chars of dense JSON returns exactly 1,024 input
+  ids — nomic honors ST's max_seq_length; no tokenize-first workaround
+  needed.
+- Accumulation ruled out: 12 consecutive short-text batches hold current
+  RSS flat at 1.45 GB (results stream to SQLite per batch; ST encode runs
+  under no_grad; nothing retained across calls). The worst real batch peaks
+  4.3 GB and falls back to 3.9 GB.
+
+Fix: `ENCODER_MAX_TOKENS = 1024` — the engine clamps the loaded model's
+max_seq_length (typical cAST code chunks are ~450 BPE tokens, so no cached
+vector changes; only pathological data chunks are tail-truncated). The char
+cap stays as a cheap pre-tokenization guard, and the D38 chunker byte cap
+stays as defense in depth. Regression tests written failing-first:
+max_seq_length clamp asserted on the load path, plus a REAL-nomic subprocess
+test that embeds 16 dense-JSON texts and asserts peak ru_maxrss < 6 GB
+(tests/test_embed_memory.py).
+
+Proof on the reproducing case: clean-clone `sherpa init` on this repo now
+completes 535/535 chunks in 137 s with **peak RSS 4.06 GB**
+(/usr/bin/time -l). Note for the record: one "the fix failed" observation
+during this investigation was a stale PRE-fix init process that had kept
+running and was killed at 10.5 GB — the timed post-fix runs are the ones
+above. The Phase 6 verifier's exploratory attacks must include a clean-clone
+`sherpa init` with a memory ceiling.
