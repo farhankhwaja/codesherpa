@@ -1,1 +1,5 @@
-"""repograph.mcp_server (implemented in a later phase; see CLAUDE.md §5/§8 for ownership)."""
+"""repograph MCP server (stdio) — see server.py and CLAUDE.md §7.6."""
+
+from repograph.mcp_server.server import create_server
+
+__all__ = ["create_server"]
