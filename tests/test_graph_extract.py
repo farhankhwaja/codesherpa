@@ -196,6 +196,20 @@ def test_extract_file_returns_defs_and_module(extraction):
     assert ("connect", SymbolKind.METHOD) in names
 
 
+def test_empty_repo_raises_clean_value_error(tmp_path: Path):
+    """Verifier advisory A2: a repo with no commits must fail with a domain
+    error, not a raw CalledProcessError."""
+    import subprocess as sp
+
+    from repograph.graph.gitio import source_files_at_rev
+
+    sp.run(["git", "init", "--quiet", str(tmp_path)], check=True)
+    with pytest.raises(ValueError, match="cannot read tree"):
+        source_files_at_rev(tmp_path)
+    with pytest.raises(ValueError, match="cannot read history"):
+        last_change_dates(tmp_path)
+
+
 def test_last_change_dates(miniproject: Path):
     dates = last_change_dates(miniproject)
     # commit days are fixed by the fixture builder (2024-01-01 .. 2024-01-06)

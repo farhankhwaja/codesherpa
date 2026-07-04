@@ -12,7 +12,11 @@ now rebased onto main and being wired to the real SQLite store. Phase 3
 - Phase 1: SQLite store, gitlayer init/sync + hooks, golden v1, throughput logged, verifier PASS — e1f3c48..b2dfc1a
 - Phase 2: cAST chunker (Py/TS/JS/TSX), verifier PASS after findings fixed — c2caf44..bd05580
 - Golden hardening: real-merge op, GOLDEN_DEEP soak, fixture v2 (+export_tasks.js), GOLDEN_PROJECTION; D14 — c35392a
-- Phase 4 pre-merge (graph extraction, ranked queries, recent_changes, MCP server, eval harness, verifier PASS) — rebased onto main in this worktree
+- Phase 4 pre-merge, rebased onto main: graph extraction (15 known call edges
+  + import/ref/defines spot-checks), ranked SymbolGraph queries,
+  recent_changes symbol diffs, MCP server (7 tools, SDK in-memory client
+  test), eval harness + ab_harness.md, pre-merge verifier PASS
+  (`verification/phase-4-premerge-report.md`), advisory A2 fixed
 
 ## In progress
 graph-mcp: Phase 4 integration against the real store (this session).
@@ -48,4 +52,13 @@ None.
 - Phase 3 eval gates (§13): recall@5 ≥0.80, MRR ≥0.60, beat BM25-only and
   vector-only; p95 <500ms warm, router path <200ms/<50ms. Harness:
   eval/run_eval.py; factory contract in D17.
+- The in-memory IndexStore + SimpleRetriever live in tests/ (inmemory_store.py,
+  simple_retriever.py) — §2.5: they must never move into repograph/.
+- Naive-retriever baseline on the gold set: recall@5 0.68 / MRR 0.62
+  (EVAL_LOG.md) — the Phase 3 hybrid must beat this comfortably to clear 0.80.
+- Verifier advisory A1 (carry to integration): extract_project has no
+  file-size guard — a 2.8 MB single-line generated JS file takes ~5.5 min.
+  Gitlayer skips >2MiB blobs (D9); confirm that protection shields graph/
+  in the integrated sync path, else add a size guard.
+- `.venv/` is inside each worktree; each worktree makes its own.
 - GPG signing requires unsandboxed git commits (gpg agent socket).

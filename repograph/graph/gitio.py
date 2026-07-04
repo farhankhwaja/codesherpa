@@ -38,8 +38,15 @@ def git_output(repo: Union[str, Path], *args: str) -> str:
 
 
 def files_at_rev(repo: Union[str, Path], rev: str = "HEAD") -> dict[str, str]:
-    """Repo-relative path -> blob hash for every file in ``rev``'s tree."""
-    out = git_output(repo, "ls-tree", "-r", "-z", rev)
+    """Repo-relative path -> blob hash for every file in ``rev``'s tree.
+
+    Raises ValueError if the rev cannot be read (unknown ref, repo with no
+    commits, not a git repo).
+    """
+    try:
+        out = git_output(repo, "ls-tree", "-r", "-z", rev)
+    except subprocess.CalledProcessError as exc:
+        raise ValueError(f"cannot read tree at rev {rev!r} in {repo}") from exc
     mapping: dict[str, str] = {}
     for entry in out.split("\0"):
         if not entry:
@@ -98,10 +105,16 @@ def source_files_at_rev(repo: Union[str, Path], rev: str = "HEAD") -> list[Sourc
 
 
 def last_change_dates(repo: Union[str, Path], rev: str = "HEAD") -> dict[str, str]:
-    """Path -> ISO date of the most recent commit touching it (for ranking)."""
-    out = git_output(
-        repo, "log", rev, "--format=%x01%aI", "--name-only", "--no-renames"
-    )
+    """Path -> ISO date of the most recent commit touching it (for ranking).
+
+    Raises ValueError if the rev has no readable history.
+    """
+    try:
+        out = git_output(
+            repo, "log", rev, "--format=%x01%aI", "--name-only", "--no-renames"
+        )
+    except subprocess.CalledProcessError as exc:
+        raise ValueError(f"cannot read history at rev {rev!r} in {repo}") from exc
     dates: dict[str, str] = {}
     current: Optional[str] = None
     for line in out.splitlines():
