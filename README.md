@@ -107,15 +107,19 @@ flask 231 s (616 chunks, 13 MB index), the React+Node app 74 s (216 chunks,
 5.9 MB). Warm re-sync with no new blobs: ~20–40 ms. Golden replay over
 flask's last 30 commits: incremental ≡ rebuild across all 7 projections.
 
-**Agent A/B** (21 tasks — debugging + feature-location — fresh headless
-Claude Code session per task, with vs without sherpa; solution keys frozen
-in advance): solve rate **21/21 with sherpa vs 19/21 without** (both
-failures were navigation failures sherpa fixed), **39–69 % fewer whole-file
-reads**, 12–48 % fewer tool calls. Honest miss: raw *token* usage per solved
-task did **not** drop (−70 % on the small fixture, +2 % on the real app) —
-sherpa's packed responses are token-dense and headless agents re-read
-context each turn; billing-weighted cost landed within ±25 % of the control.
-Details in `verification/ab/ab-results.md`.
+**Agent A/B** (21 frozen tasks — debugging + feature-location — fresh
+headless Claude Code session per task, with vs without sherpa; solution keys
+frozen in advance; two rounds, the second after `search_code` went
+compact-first): solve rate **with sherpa ≥ without in both rounds** (v1:
+21/21 vs 19/21; v2: 20/21 vs 19/21 — the failures that flip between rounds
+are run-to-run variance, reported as such). With sherpa: **48–61 % fewer
+whole-file reads**, 37–48 % fewer tool calls, and on the real app **52.7 %
+lower billed cost** (v2). Honest miss: raw *token* usage per solved task
+still did not drop ≥50 % (v2: −16 % on the small fixture, +1 % on the real
+app; v1 was −70 %/+2 % before compact-first) — headless agents re-read the
+growing context every turn, so cache reads dominate raw counts. Full
+methodology and per-task data: `verification/ab/ab-results.md` (v1) and
+`ab-results-v2.md` (v2).
 
 ## Honest limitations
 
@@ -130,7 +134,12 @@ Details in `verification/ab/ab-results.md`.
   on flask and the React+Node app; MRR −0.054 on flask, +0.014 on the other.
   It stays on for the caller/callee context it attaches; flag to disable.
 - **Token-frugality claim is nuanced.** See the A/B numbers above: fewer
-  reads and better solve rates, but no raw-token reduction in headless runs.
+  reads, lower cost, better solve rates — but no ≥50 % raw-token reduction
+  in headless runs, even after the compact-first response change.
+- **Indexing is bounded but not free.** Embedding memory is clamped
+  (≤1024 tokens/text after a real 10 GB+ RSS incident with single-line JSONL
+  data files — DECISIONS D38); cold init on a ~30–40 kLOC repo runs 1–4 min
+  on CPU.
 
 ## vs. other tools
 

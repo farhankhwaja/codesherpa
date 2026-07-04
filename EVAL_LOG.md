@@ -253,3 +253,25 @@ per task per arm, ground truth never shown to agents.
 - CI workflow added (.github/workflows/ci.yml): venv is ACTIVE for the
   suite (console-script requirement), model caches cached, golden test run
   explicitly.
+
+## 2026-07-04 — Phase 6 — A/B token benchmark v2 (after compact-first search_code, D39)
+
+Human's B3 resolution executed: `search_code` now compact-first (1500-token
+default, signature+expand_id rows); SAME 21 frozen tasks, same runner/model/
+grading as v1 (entry above, untouched). Full report:
+verification/ab/ab-results-v2.md.
+
+| | solve | mean tokens_total (solved) | mean cost | tools | reads |
+|---|---|---|---|---|---|
+| fixture A v2 | 10/10 | 372,012 | $0.660 | 40.0 | 20.8 |
+| fixture B v2 | 10/10 | 431,544 (**−16.0 %**, was −69.8 %) | $0.558 (+15.5 %) | 25.3 (+37 %) | 9.4 (+55 %) |
+| sizly A v2 | 9/11 | 590,570 | $1.703 | 62.0 | 30.3 |
+| sizly B v2 | 10/11 | 583,342 (+1.2 %) | $0.805 (**+52.7 %**) | 32.1 (+48 %) | 11.9 (+61 %) |
+
+- §13 raw-token ≥50 % target: **still not met** (−16.0 % / +1.2 %); recorded
+  as-is, threshold untouched, B3 updated with the v2 outcome.
+- Compact-first effect: fixture raw-token regression −69.8 → −16.0; fresh
+  tokens now −4.2 % / **+13.2 %** (was −159 % / −37 %); sizly cost −52.7 %.
+- Guardrail B ≥ A holds (20/21 vs 19/21). Variance note: v1↔v2 flipped two
+  task outcomes (sizly D2, D5) — single-run-per-task remains the harness's
+  main limitation.
