@@ -167,5 +167,8 @@ delta = 0.000 — non-decreasing ✓ (matches graph-mcp's SimpleRetriever
 measurement; on this fixture the hybrid top-5 already contains the answers
 expansion would attach). `expansion_enabled` stays on by default (§7.5.5).
 
-Full suite at this commit: 273 passed, 0 failed, 0 skipped (incl. both eval
-gates, golden + golden-embeddings, MCP stdio integration).
+Full suite: 273 passed, 0 failed, 0 skipped (incl. both eval gates, golden +
+golden-embeddings, MCP stdio integration). [Correction, same day — verifier
+finding: that run predated the `build_retriever` commit, at which the
+Phase-4 serve probe expired (272/1 at commit 150a801). Fixed per D29; the
+suite count after the fix is recorded in the verifier report.]

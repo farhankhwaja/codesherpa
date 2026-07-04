@@ -303,3 +303,27 @@ disqualified, so nomic stands. Observation for users/Phase 5: MiniLM reaches
 parity on this small fixture at 7x the speed with no trust_remote_code —
 worth re-benchmarking on real external repos before ship (`embed_model` is
 config). The full pipeline passes the official gate with nomic (D27).
+
+## D29 — Verifier findings: runtime deps restored; expired serve probe replaced (Phase 3, verifier FAIL round)
+Final-verification FAIL had two mechanical causes, both fixed:
+(a) **`sentence-transformers` + `einops` were missing from pyproject.toml.**
+They were present on this branch pre-rebase; the third rebase's conflict
+resolution script string-matched against main's OLD dependency-list text and
+silently no-opped, dropping both lines while the comment referencing einops
+survived. Clean installs then failed the eval gates and `repograph serve`
+died with a raw ModuleNotFoundError. Both are §6-sanctioned (D25 recorded
+the einops justification); now actually declared. Lesson recorded: verify
+conflict-resolution string replacements actually matched.
+(b) **`test_serve_reports_missing_retrieval_pipeline` retired** (§2.1, D5
+precedent). Its premise — "the retrieval pipeline does not exist yet, serve
+must explain that and exit 2" — expired the moment this branch provided
+`repograph.retrieve.build_retriever`; at commit 150a801 `serve .` genuinely
+serves, so the probe failed in every configuration (and, per the verifier's
+advisory, a passing real-serve run would have embedded the host repo from
+inside the test suite: ~10 MB index + minutes of CPU). Replaced by
+`test_serve_refuses_non_repository`: same fail-loudly/never-serve-fake-data
+intent, asserted against the nearest remaining bad input (non-git dir,
+nonzero exit, no .repograph created), no server launch, no repo mutation.
+Real serving is covered by the MCP stdio integration test. EVAL_LOG's
+"273 passed at this commit" line was also stale (the suite run predated the
+`build_retriever` commit); corrected in place with a note.

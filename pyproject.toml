@@ -20,6 +20,8 @@ dependencies = [
     "tree-sitter>=0.23",               # §6 parsing (Phase 2)
     "tree-sitter-language-pack>=0.7",  # §6 parsing: grammars (Phase 2, Phase 4 graph queries)
     "mcp>=1.2",                        # §6 MCP SDK (Phase 4)
+    "sentence-transformers>=3.0",      # §6 embeddings + CrossEncoder reranker (Phase 3, lazy import)
+    "einops>=0.7",                     # required by nomic-embed remote modeling code (Phase 3, D25/D29)
 ]
 
 [project.optional-dependencies]

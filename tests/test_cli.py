@@ -42,17 +42,24 @@ def test_unimplemented_subcommand_exits_nonzero() -> None:
     assert "not implemented" in result.stderr
 
 
-def test_serve_reports_missing_retrieval_pipeline() -> None:
-    """Phase 4 wires `serve`; until Phase 3 merges it must explain what's
-    missing (never serve mock data) and exit 2."""
+def test_serve_refuses_non_repository(tmp_path) -> None:
+    """`serve` must fail — never serve fake or accidental data — when pointed
+    at a directory that is not a git repository.
+
+    Replaces the retired Phase-3-missing probe (see DECISIONS.md D29, D5
+    precedent): the retrieval pipeline now exists, so `serve <valid repo>`
+    genuinely serves (covered by the MCP stdio integration test); the
+    fail-loudly intent is preserved against the nearest remaining bad input.
+    This also keeps the suite free of a real server launch: the failure
+    happens before any model load or repo mutation."""
     result = subprocess.run(
-        [sys.executable, "-m", "repograph.cli", "serve", "."],
+        [sys.executable, "-m", "repograph.cli", "serve", str(tmp_path)],
         capture_output=True,
         text=True,
+        timeout=120,
     )
-    assert result.returncode == 2
-    assert "retrieval pipeline" in result.stderr
-    assert "Phase 3" in result.stderr
+    assert result.returncode != 0
+    assert not (tmp_path / ".repograph" / "index.db").exists()
 
 
 def test_version_flag() -> None:
