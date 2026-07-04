@@ -1,9 +1,10 @@
 # Progress
 
 ## Current phase & worktree
-Phase 0 (Skeleton & Contracts) — done on `main`, pending Verifier sign-off.
-Phase 1 has NOT been started (per explicit instruction). Next step after this:
-spawn the three worktrees per CLAUDE.md §8 and start Phase 1 in `core-index`.
+Phase 0 (Skeleton & Contracts) — **COMPLETE** on `main` (Verifier PASS,
+`verification/phase-0-report.md`). Phase 1 has NOT been started (per explicit
+instruction). Next step: spawn the three worktrees per CLAUDE.md §8
+(`core-index`, `graph-mcp`, `retrieval`) and start Phase 1 in `core-index`.
 
 ## Done (one line each, with commit hash)
 - Phase 0 skeleton: pyproject (console script `repograph`), package dirs, stub CLI — (this commit)
@@ -11,10 +12,12 @@ spawn the three worktrees per CLAUDE.md §8 and start Phase 1 in `core-index`.
 - Fixture: `tests/fixtures/build_miniproject.py` builds deterministic git repo (15 non-init .py, 11 .ts/.tsx, 6 commits incl. modify+delete) — (this commit)
 - Gold set: `eval/gold_queries.jsonl`, 25 queries (14 nl / 7 symbol / 4 stacktrace) — (this commit)
 - Verifier agent: `.claude/agents/verifier.md` (isolation: worktree) — (this commit)
-- Tests: contracts/CLI/fixture/gold-queries, 32 passing — (this commit)
+- Tests: contracts/CLI/fixture/gold-queries, 32 passing — 2ce69ea
+- Skeleton + frozen contracts — acf75bb; verifier agent + logs — 6551e83
+- Verifier PASS on Phase 0 (32/32 tests, all criteria, 0 findings) — report committed
 
 ## In progress
-Nothing. Awaiting Phase 0 Verifier report → commit report → Phase 0 complete.
+Nothing. Phase 0 closed; waiting on go-ahead for Phase 1.
 
 ## Blocked / open questions
 None.
