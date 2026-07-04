@@ -1,8 +1,14 @@
-"""Shared builder for the Phase 3 eval gate (test + EVAL_LOG report script).
+"""Shared builder for the Phase 3 eval harness (tests + EVAL_LOG reports).
 
-Builds the fixture index once, embeds with the chosen model, and produces
-comparable reports for hybrid+rerank, hybrid-norerank, BM25-only and
-vector-only over the gold query set.
+Builds a REAL index of the fixture (gitlayer sync -> cAST chunker -> SQLite
+store; symbols/edges test-populated pending Phase 4), embeds with the chosen
+model, and produces comparable reports for hybrid+rerank, hybrid-norerank,
+BM25-only and vector-only over the gold query set.
+
+NOTE: the §13 quality thresholds are DEFERRED — not asserted anywhere — until
+the hardened gold set lands (human instruction 2026-07-04; see BLOCKED.md and
+DECISIONS D21). The constants stay here, unlowered, for the report display
+and for re-arming the gate.
 """
 
 from __future__ import annotations
@@ -14,17 +20,18 @@ from repograph.retrieve.config import RetrievalConfig
 from repograph.retrieve.rerank import CrossEncoderReranker
 from repograph.retrieve.retriever import HybridRetriever
 from tests.support.evallib import EvalReport, evaluate, load_gold_queries
-from tests.support.indexer import index_miniproject
-from tests.support.memstore import InMemoryIndexStore
+from tests.support.realstore import build_real_index
 
 ROOT = Path(__file__).resolve().parents[2]
 GOLD_PATH = ROOT / "eval" / "gold_queries.jsonl"
 
-# Chosen by benchmark on the fixture gold set — see DECISIONS.md (Phase 3).
+# Chosen by benchmark on real cAST chunks — see DECISIONS.md (Phase 3).
 EMBED_MODEL = "nomic-ai/nomic-embed-text-v1.5"
 RERANKER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
-# §13 thresholds — these constants mirror CLAUDE.md and may never be lowered.
+# §13 thresholds — mirror CLAUDE.md, may never be lowered. Grading is
+# deferred until the hardened gold set lands (BLOCKED.md); latency gates
+# below are NOT deferred (they do not depend on the gold set's difficulty).
 RECALL5_THRESHOLD = 0.80
 MRR_THRESHOLD = 0.60
 P95_WARM_MS = 500
@@ -32,9 +39,11 @@ P95_ROUTER_MS = 200
 
 
 class GateHarness:
-    def __init__(self, fixture_root: Path) -> None:
+    def __init__(self, fixture_root: Path, work_dir: Path) -> None:
         self.queries = load_gold_queries(GOLD_PATH)
-        self.store: InMemoryIndexStore = index_miniproject(fixture_root)
+        index = build_real_index(fixture_root, work_dir)
+        self.store = index.store
+        self.repo_root = index.repo_root
         self.engine = EmbeddingEngine(self.store, EMBED_MODEL, trust_remote_code=True)
         chunks = [
             c

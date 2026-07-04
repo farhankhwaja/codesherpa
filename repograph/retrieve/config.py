@@ -29,19 +29,20 @@ class RetrievalConfig:
 
     # cross-encoder rerank
     rerank_enabled: bool = True
-    rerank_top: int = 30
+    rerank_top: int = 20
     """§7.5 nominally reranks the fused top 50, but CE forward passes dominate
-    warm latency on CPU (fused-top-50 at 1200 chars measured p95 ≈ 750 ms vs
-    the §13 gate of < 500 ms). Depth 30 + 1000-char passages meet the gate
-    with identical gold-set quality — §15 spirit clause, see DECISIONS.md."""
+    warm latency on CPU and real cAST chunks are mostly whole-file (every
+    passage hits the char cap): depth 30 measured p95 = 519 ms vs the §13
+    gate of < 500 ms; depth 20 + 700-char passages measure ~380 ms with
+    unchanged gold-set quality — §15 spirit clause, see DECISIONS.md."""
     # TODO(upgrade): §6 primary BAAI/bge-reranker-v2-m3 rejected for CPU
     # latency (p95 6696 ms vs the 500 ms §13 gate; +0.034 MRR — EVAL_LOG.md).
     # Revisit on GPU / quantized runtimes.
     reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
-    rerank_max_chars: int = 1000
+    rerank_max_chars: int = 700
     """Per-passage character cap fed to the cross-encoder. Sequence length
     dominates CE cost on CPU; the breadcrumb + opening lines carry most of
-    the relevance signal."""
+    the relevance signal. 1000 chars measured p95 = 523 ms on real chunks."""
 
     # 1-hop graph expansion
     expansion_enabled: bool = True

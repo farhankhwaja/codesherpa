@@ -1,9 +1,10 @@
-"""Benchmark candidate embedding models on the fixture gold set (§7.4).
+"""Benchmark candidate embedding models on REAL cAST chunks (§7.4).
 
 Run manually:  .venv/bin/python tests/support/benchmark_models.py [model ...]
 
-For each model: index the fixture into a fresh in-memory store, embed all
-chunks (fresh store per model so caches never mix models), then score
+For each model: build a fresh REAL index of the fixture (gitlayer sync ->
+cAST chunker -> SQLite store; fresh DB per model so embedding caches and the
+pinned vec0 dimension never mix models), embed all active chunks, then score
 vector-only retrieval and hybrid (RRF, no rerank) on the gold queries.
 Winner selection = vector-only recall@5, then MRR (isolates the embedder).
 Results are recorded in DECISIONS.md.
@@ -12,6 +13,7 @@ Results are recorded in DECISIONS.md.
 from __future__ import annotations
 
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -22,7 +24,7 @@ from repograph.embed.engine import EmbeddingEngine  # noqa: E402
 from repograph.retrieve.config import RetrievalConfig  # noqa: E402
 from repograph.retrieve.retriever import HybridRetriever  # noqa: E402
 from tests.support.evallib import evaluate, load_gold_queries  # noqa: E402
-from tests.support.indexer import index_miniproject  # noqa: E402
+from tests.support.realstore import build_real_index  # noqa: E402
 
 FIXTURE = ROOT / "tests" / "fixtures" / "miniproject"
 GOLD = ROOT / "eval" / "gold_queries.jsonl"
@@ -43,7 +45,9 @@ def ensure_fixture() -> None:
 
 
 def bench_model(model_name: str, queries: list[dict]) -> dict:
-    store = index_miniproject(FIXTURE)
+    work = Path(tempfile.mkdtemp(prefix="rg-bench-"))
+    index = build_real_index(FIXTURE, work)
+    store = index.store
     engine = EmbeddingEngine(store, model_name, trust_remote_code=True)
     chunks = [c for blob in sorted(store.active_blobs()) for c in store.chunks_for_blob(blob)]
 
@@ -63,6 +67,7 @@ def bench_model(model_name: str, queries: list[dict]) -> dict:
 
     vec_report = evaluate(f"{model_name.split('/')[-1]} vec", queries, vector_only)
     hyb_report = evaluate(f"{model_name.split('/')[-1]} hyb", queries, hybrid)
+    store.close()
     return {
         "model": model_name,
         "embed_s": embed_s,

@@ -1,4 +1,5 @@
-"""Print the Phase 3 eval-gate table (for EVAL_LOG.md).
+"""Print the Phase 3 eval table (PRELIMINARY until the hardened gold set
+lands — see BLOCKED.md; numbers go to EVAL_LOG.md marked PRELIMINARY).
 
 Run:  .venv/bin/python tests/support/gate_report.py [embed_model] [reranker_model]
 """
@@ -6,6 +7,7 @@ Run:  .venv/bin/python tests/support/gate_report.py [embed_model] [reranker_mode
 from __future__ import annotations
 
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -23,7 +25,8 @@ def main() -> None:
     from tests.support.benchmark_models import ensure_fixture
 
     ensure_fixture()
-    harness = gatelib.GateHarness(ROOT / "tests" / "fixtures" / "miniproject")
+    work = Path(tempfile.mkdtemp(prefix="rg-gate-"))
+    harness = gatelib.GateHarness(ROOT / "tests" / "fixtures" / "miniproject", work)
     print(gatelib.format_table(harness.reports()))
 
 

@@ -1,16 +1,21 @@
-"""Phase 3 eval gate (CLAUDE.md §10/§13) on the fixture gold set.
+"""Phase 3 eval harness on the REAL index (gitlayer -> cAST -> SQLite store)
+with the real embedding model and cross-encoder (downloads on first run,
+cached under ~/.cache/repograph/).
 
-Uses the real embedding model and cross-encoder (downloads on first run,
-cached under ~/.cache/repograph/). Thresholds mirror §13 and may never be
-lowered.
+GRADING STATUS (DECISIONS D21, BLOCKED.md): the §13 QUALITY gate — recall@5
+>= 0.80, MRR >= 0.60, hybrid strictly beats BM25-only and vector-only — is
+DEFERRED by human instruction (2026-07-04) until the hardened gold set from
+the graph-mcp session lands on main: the current 25-query set has heavy
+query/code vocabulary overlap, so single-method baselines sit at or near the
+recall@5 ceiling and the strictly-beats comparison is not meaningful yet.
+Numbers are still computed on every run, printed here, and logged to
+EVAL_LOG.md marked PRELIMINARY. The thresholds in CLAUDE.md §13 and
+tests/support/gatelib.py are UNCHANGED.
 
-Known limitation, documented in BLOCKED.md: the §13 "hybrid strictly beats
-vector-only on recall@5" comparison is saturated on this gold set — both
-hybrid+rerank AND the vector-only baseline reach recall@5 = 1.00, so
-"strictly greater" is structurally impossible until the gold set gains
-harder queries (eval/ is owned by the graph-mcp worktree). This gate
-asserts >= for vector-only (no regression) and strict > for BM25-only;
-the saturation is flagged for human review, NOT silently dropped.
+What IS asserted here (not gold-set-difficulty-dependent):
+- p95 warm latency (reranker on) < 500 ms; router-path p95 < 200 ms (§13)
+- the permanent embedding cache computes 0 new embeddings on re-index (§7.4)
+- every gold query returns a non-empty packed response (pipeline sanity)
 """
 
 from __future__ import annotations
@@ -18,46 +23,25 @@ from __future__ import annotations
 import pytest
 
 from tests.support.gatelib import (
-    MRR_THRESHOLD,
     P95_ROUTER_MS,
     P95_WARM_MS,
-    RECALL5_THRESHOLD,
     GateHarness,
     format_table,
 )
 
 
 @pytest.fixture(scope="session")
-def gate(miniproject) -> GateHarness:
-    return GateHarness(miniproject)
+def gate(miniproject, tmp_path_factory) -> GateHarness:
+    harness = GateHarness(miniproject, tmp_path_factory.mktemp("evalgate"))
+    yield harness
+    harness.store.close()
 
 
 @pytest.fixture(scope="session")
 def reports(gate):
     reps = gate.reports()
-    print("\n" + format_table(reps))  # visible with -s; the EVAL_LOG source
+    print("\nPRELIMINARY (gate deferred, D21):\n" + format_table(reps))
     return reps
-
-
-def test_recall_at_5_threshold(reports):
-    assert reports["hybrid+rerank"].recall_at_5 >= RECALL5_THRESHOLD
-
-
-def test_mrr_threshold(reports):
-    assert reports["hybrid+rerank"].mrr >= MRR_THRESHOLD
-
-
-def test_hybrid_strictly_beats_bm25_only(reports):
-    assert reports["hybrid+rerank"].recall_at_5 > reports["bm25-only"].recall_at_5
-
-
-def test_hybrid_not_beaten_by_vector_only(reports):
-    """Strict > is saturated at 1.00/1.00 on this gold set — see BLOCKED.md.
-
-    This asserts hybrid never regresses below the vector-only baseline; the
-    strictly-greater §13 comparison awaits a harder gold set (human input).
-    """
-    assert reports["hybrid+rerank"].recall_at_5 >= reports["vector-only"].recall_at_5
 
 
 def test_p95_warm_latency_reranker_on(reports):
@@ -70,8 +54,18 @@ def test_router_path_p95(reports):
     assert reports["hybrid+rerank"].latency_p95_ms("stacktrace") < P95_ROUTER_MS
 
 
+def test_every_gold_query_returns_results(gate):
+    """Pipeline sanity: no gold query may come back empty on the real index."""
+    empty = [
+        q["id"]
+        for q in gate.queries
+        if not gate.hybrid_rerank.search(q["query"]).results
+    ]
+    assert empty == [], f"queries with empty responses: {empty}"
+
+
 def test_embedding_cache_reused_across_runs(gate):
-    """Re-embedding the unchanged fixture computes zero new embeddings."""
+    """Re-embedding the unchanged real index computes zero new embeddings."""
     from repograph.embed.engine import EmbeddingEngine
 
     engine = EmbeddingEngine(
