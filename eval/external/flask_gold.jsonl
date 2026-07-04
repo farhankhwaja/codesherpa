@@ -1,0 +1,14 @@
+{"id": "f01", "type": "nl", "query": "register a blueprint on the application", "expected_files": ["src/flask/sansio/app.py", "src/flask/sansio/blueprints.py", "src/flask/blueprints.py"], "expected_symbols": ["register_blueprint"]}
+{"id": "f02", "type": "nl", "query": "turn a view function's return value into a real response object", "expected_files": ["src/flask/app.py"], "expected_symbols": ["make_response"]}
+{"id": "f03", "type": "nl", "query": "load configuration from environment variables with a common prefix", "expected_files": ["src/flask/config.py"], "expected_symbols": ["from_prefixed_env"]}
+{"id": "f04", "type": "nl", "query": "how does the command line tool find the application object in a module", "expected_files": ["src/flask/cli.py"], "expected_symbols": ["find_best_app", "locate_app"]}
+{"id": "f05", "type": "nl", "query": "safely serve a file from a directory given its name", "expected_files": ["src/flask/helpers.py"], "expected_symbols": ["send_from_directory"]}
+{"id": "f06", "type": "nl", "query": "where does the session get stored in a signed browser cookie", "expected_files": ["src/flask/sessions.py"], "expected_symbols": ["SecureCookieSessionInterface"]}
+{"id": "f07", "type": "nl", "query": "signal emitted after a template finishes rendering", "expected_files": ["src/flask/templating.py", "src/flask/signals.py"], "expected_symbols": ["template_rendered"]}
+{"id": "f08", "type": "symbol", "query": "full_dispatch_request", "expected_files": ["src/flask/app.py"], "expected_symbols": ["full_dispatch_request"]}
+{"id": "f09", "type": "symbol", "query": "send_from_directory", "expected_files": ["src/flask/helpers.py"], "expected_symbols": ["send_from_directory"]}
+{"id": "f10", "type": "nl_hard", "query": "run the hooks that fire before each incoming call is handled", "expected_files": ["src/flask/app.py"], "expected_symbols": ["preprocess_request"]}
+{"id": "f11", "type": "nl_hard", "query": "keep per-call state alive while one call is being processed", "expected_files": ["src/flask/ctx.py"], "expected_symbols": ["AppContext"]}
+{"id": "f12", "type": "stacktrace", "query": "TypeError: The view function did not return a valid response. The function either returned None or ended without a return statement.", "expected_files": ["src/flask/app.py"], "expected_symbols": ["make_response"]}
+{"id": "f13", "type": "nl", "query": "simulate submitting a form in a test without a running server", "expected_files": ["src/flask/testing.py"], "expected_symbols": ["FlaskClient"]}
+{"id": "f14", "type": "nl", "query": "create and customize the jinja environment", "expected_files": ["src/flask/templating.py", "src/flask/sansio/app.py", "src/flask/app.py"], "expected_symbols": ["create_jinja_environment", "Environment"]}

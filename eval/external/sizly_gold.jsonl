@@ -1,0 +1,12 @@
+{"id": "s01", "type": "nl", "query": "figure out the brand name from a pasted product link", "expected_files": ["frontend/src/utils/brandExtractor.js", "backend/utils/brandExtractor.js"], "expected_symbols": ["extractBrandFromUrl"]}
+{"id": "s02", "type": "nl_hard", "query": "the connection to the AI provider keeps dropping midway through computing a size", "expected_files": ["backend/ai/fitRecommend.js"], "expected_symbols": ["getRecommendation", "isConnectionError"]}
+{"id": "s03", "type": "nl", "query": "verify the signed-in user's token before an api call is handled", "expected_files": ["backend/middleware/auth.js"], "expected_symbols": ["requireUser"]}
+{"id": "s04", "type": "nl", "query": "stop a single caller from hammering an expensive endpoint", "expected_files": ["backend/middleware/rateLimit.js"], "expected_symbols": ["limiter"]}
+{"id": "s05", "type": "nl", "query": "assemble the shopper's measurements and history that get sent out for a recommendation", "expected_files": ["frontend/src/utils/api.js"], "expected_symbols": ["profileToPayload"]}
+{"id": "s06", "type": "nl", "query": "build the text prompt the size model actually reads", "expected_files": ["backend/ai/fitRecommend.js"], "expected_symbols": ["buildUserPrompt"]}
+{"id": "s07", "type": "nl_hard", "query": "how long an unreviewed nudge keeps showing before it quietly drops off", "expected_files": ["frontend/src/utils/time.js", "backend/utils/fitCheckScheduler.js"], "expected_symbols": ["isPendingExpired", "PENDING_EXPIRY_DAYS", "EXPIRY_DAYS"]}
+{"id": "s08", "type": "nl", "query": "decide whether a returning member skips the first-time setup flow", "expected_files": ["frontend/src/hooks/useProfile.js"], "expected_symbols": ["useProfile"]}
+{"id": "s09", "type": "symbol", "query": "extractBrandFromUrl", "expected_files": ["frontend/src/utils/brandExtractor.js", "backend/utils/brandExtractor.js"], "expected_symbols": ["extractBrandFromUrl"]}
+{"id": "s10", "type": "symbol", "query": "requireUser", "expected_files": ["backend/middleware/auth.js"], "expected_symbols": ["requireUser"]}
+{"id": "s11", "type": "nl", "query": "detect the garment's cut or fit style from the product page", "expected_files": ["backend/ai/groundedInfer.js", "backend/ai/inferProduct.js"], "expected_symbols": ["mapFitStyle"]}
+{"id": "s12", "type": "nl_hard", "query": "the installed app's offline shell must not intercept the sign-in redirect pages", "expected_files": ["frontend/vite.config.js"], "expected_symbols": ["navigateFallbackDenylist"]}

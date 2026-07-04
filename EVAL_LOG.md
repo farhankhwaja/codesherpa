@@ -172,3 +172,22 @@ golden-embeddings, MCP stdio integration). [Correction, same day — verifier
 finding: that run predated the `build_retriever` commit, at which the
 Phase-4 serve probe expired (272/1 at commit 150a801). Fixed per D29; the
 suite count after the fix is recorded in the verifier report.]
+
+## 2026-07-04 — Phase 5 — external-repo init end-to-end (branch phase-5)
+
+`repograph init` cold, CPU-only Apple M-series, shipping defaults
+(nomic-embed-text-v1.5, cached model, D30 wiring: init owns the embedding
+pass with progress output). Transcripts: verification/phase5/.
+
+| repo | tracked files | LOC | blobs | chunks | sync (parse+store+graph) | embed | total cold init | index size | repo .git |
+|---|---|---|---|---|---|---|---|---|---|
+| pallets/flask @HEAD | 236 | 38,330 | 224 | 616 | 0.32 s | ~228 s | **231.5 s** | 13.0 MB | 13 MB |
+| sizly @1c01da6 | 104 | 29,193 | 95 | 216 | 0.18 s | ~71 s | **73.7 s** | 5.9 MB | 4.5 MB |
+
+- No crashes on either repo (incl. .jsx via the javascript grammar, rst/md
+  via line-window fallback).
+- 5 sample queries per repo: flask 5/5 correct file at rank 1;
+  sizly 5/5 correct file in top-5 (3/5 at rank 1). Router-path queries
+  0–70 ms with no model load.
+- MCP cold handshake with built index: regression-tested < 5 s
+  (tests/test_serve_startup.py, offline env).
