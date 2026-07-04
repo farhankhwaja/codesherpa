@@ -1,7 +1,7 @@
 """repograph command-line interface.
 
-Phase 0 ships the argument surface only; subcommands are implemented in later
-phases (init/sync: Phase 1, search: Phase 3, serve: Phase 4, bench: Phase 5).
+init/sync/status are live (Phase 1); search arrives in Phase 3, serve in
+Phase 4, bench in Phase 5.
 """
 
 from __future__ import annotations
@@ -12,9 +12,6 @@ import sys
 from repograph import __version__
 
 _PHASE_OF = {
-    "init": 1,
-    "sync": 1,
-    "status": 1,
     "search": 3,
     "serve": 4,
     "bench": 5,
@@ -49,6 +46,66 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _cmd_init(args: argparse.Namespace) -> int:
+    from repograph.gitlayer.initialize import init
+    from repograph.gitlayer.repo import NotARepositoryError
+
+    try:
+        init(args.path, quiet=False)
+    except NotARepositoryError as exc:
+        print(f"repograph init: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def _cmd_sync(args: argparse.Namespace) -> int:
+    from repograph.gitlayer.repo import NotARepositoryError
+    from repograph.gitlayer.sync import sync
+
+    try:
+        sync(".", quiet=args.quiet)
+    except NotARepositoryError as exc:
+        if not args.quiet:
+            print(f"repograph sync: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def _cmd_status(_args: argparse.Namespace) -> int:
+    from repograph.gitlayer.repo import NotARepositoryError, open_repo, repo_root
+    from repograph.gitlayer.sync import default_db_path
+    from repograph.store.sqlite_store import SQLiteIndexStore
+
+    try:
+        root = repo_root(open_repo("."))
+    except NotARepositoryError as exc:
+        print(f"repograph status: {exc}", file=sys.stderr)
+        return 1
+    db = default_db_path(root)
+    if not db.exists():
+        print("repograph status: no index found — run `repograph init` first.", file=sys.stderr)
+        return 1
+    store = SQLiteIndexStore(db)
+    try:
+        counts = {
+            table: store.conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            for table in ("blobs", "chunks", "symbols", "edges", "embeddings")
+        }
+        active = len(store.active_blobs())
+        files = len(store.files_for_ref("HEAD"))
+        print(f"index:      {db}")
+        print(f"last sync:  {store.get_meta('last_sync') or 'never'}")
+        print(f"head:       {store.get_meta('last_sync_head') or 'unknown'}")
+        print(f"files@HEAD: {files}")
+        print(f"blobs:      {active} active / {counts['blobs']} total")
+        print(f"chunks:     {counts['chunks']}")
+        print(f"symbols:    {counts['symbols']}  edges: {counts['edges']}")
+        print(f"embeddings: {counts['embeddings']}")
+    finally:
+        store.close()
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -56,6 +113,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.command is None:
         parser.print_help()
         return 0
+    if args.command == "init":
+        return _cmd_init(args)
+    if args.command == "sync":
+        return _cmd_sync(args)
+    if args.command == "status":
+        return _cmd_status(args)
 
     phase = _PHASE_OF[args.command]
     print(

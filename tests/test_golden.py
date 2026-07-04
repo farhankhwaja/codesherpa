@@ -19,7 +19,7 @@ import sqlite3
 import subprocess
 from pathlib import Path
 
-from hypothesis import HealthCheck, given, settings
+from hypothesis import HealthCheck, example, given, settings
 from hypothesis import strategies as st
 
 # The Phase-1 public API the golden test pins down. Importing at module level
@@ -227,6 +227,22 @@ _OPS = st.one_of(
     derandomize=True,  # CI-time bound (<120 s) requires a fixed example set
 )
 @given(ops=st.lists(_OPS, min_size=10, max_size=16))
+@example(  # pinned: every op kind at least once, in a history-churning order
+    ops=[
+        ("add", 0, 7),
+        ("modify", 3),
+        ("branch", 1),
+        ("add", 1, 11),
+        ("switch",),
+        ("merge", 0),
+        ("modify", 5),
+        ("delete", 2),
+        ("revert",),
+        ("branch", 1),
+        ("add", 0, 13),
+        ("switch",),
+    ]
+)
 def test_golden_incremental_equals_rebuild(ops, miniproject, tmp_path_factory) -> None:
     tmp = tmp_path_factory.mktemp("golden")
     driver = _fresh_clone(miniproject, tmp / "repo")

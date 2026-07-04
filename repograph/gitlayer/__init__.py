@@ -1,1 +1,6 @@
-"""repograph.gitlayer (implemented in a later phase; see CLAUDE.md §5/§8 for ownership)."""
+"""repograph.gitlayer — blob tracking, hooks, incremental sync (CLAUDE.md §7.1)."""
+
+from repograph.gitlayer.initialize import init
+from repograph.gitlayer.sync import sync
+
+__all__ = ["init", "sync"]

@@ -31,8 +31,10 @@ def test_console_script_help_runs() -> None:
 
 
 def test_unimplemented_subcommand_exits_nonzero() -> None:
+    # `search` is the not-yet-implemented command until Phase 3 lands
+    # (Phase 0 used `status` here; Phase 1 implemented status — see DECISIONS.md D5).
     result = subprocess.run(
-        [sys.executable, "-m", "repograph.cli", "status"],
+        [sys.executable, "-m", "repograph.cli", "search", "anything"],
         capture_output=True,
         text=True,
     )
