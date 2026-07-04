@@ -245,13 +245,39 @@ def _project_fts(store: SQLiteIndexStore) -> tuple[frozenset[str], tuple[str, ..
     return frozenset(fts_ids & active_ids), tuple(sorted(active_ids - fts_ids))
 
 
+def _project_symbols(store: SQLiteIndexStore) -> tuple[tuple, ...]:
+    """Phase 4 extractor (ownership exception per the note below / D14).
+
+    Graph tables are recomputed from the active mapping and replaced on every
+    sync (repograph/graph/index.py, DECISIONS D19), so the WHOLE table —
+    including file_path — must match between incremental and rebuild; no
+    active-blob filtering is needed or wanted here.
+    """
+    rows = store.conn.execute(
+        """
+        SELECT node_id, symbol, kind, blob_hash, byte_start, byte_end,
+               file_path, signature
+        FROM symbols ORDER BY node_id
+        """
+    ).fetchall()
+    return tuple(tuple(row) for row in rows)
+
+
+def _project_edges(store: SQLiteIndexStore) -> tuple[tuple, ...]:
+    """Phase 4 extractor (ownership exception; see _project_symbols)."""
+    rows = store.conn.execute(
+        "SELECT src, dst, kind FROM edges ORDER BY src, dst, kind"
+    ).fetchall()
+    return tuple(tuple(row) for row in rows)
+
+
 # The compared projection, one extractor per logical table. Golden equality is
 # defined over the ACTIVE rows only: incremental DBs legitimately retain
 # inactive rows (soft deactivation is the design).
 #
 # NOTE FOR LATER PHASES: Phase 3 MUST extend this projection with an
-# embeddings extractor and Phase 4 MUST extend it with symbols + edges
-# extractors, so the Golden Test covers their tables too. Those phases are
+# embeddings extractor (Phase 4 added symbols + edges below), so the Golden
+# Test covers their tables too. Those phases are
 # granted an ownership exception to edit GOLDEN_PROJECTION / add their
 # extractor functions here — for their tables only; nothing else in this
 # file may be touched by other worktrees.
@@ -260,6 +286,8 @@ GOLDEN_PROJECTION: dict[str, callable] = {
     "files_head": _project_files_head,
     "chunks_of_active_blobs": _project_chunks,
     "fts_of_active_chunks": _project_fts,
+    "symbols": _project_symbols,
+    "edges": _project_edges,
 }
 
 

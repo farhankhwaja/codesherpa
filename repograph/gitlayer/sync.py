@@ -19,6 +19,8 @@ from pathlib import Path
 
 from repograph.chunker import chunk_blob, detect_language
 from repograph.gitlayer.ignore import IgnoreRules, looks_binary
+from repograph.graph.index import sync_graph
+from repograph.graph.languages import language_for_path as graph_language
 from repograph.gitlayer.lock import FileLock
 from repograph.gitlayer.repo import (
     blob_size,
@@ -43,6 +45,8 @@ class SyncStats:
     blobs_deactivated: int = 0
     chunks_added: int = 0
     files_mapped: int = 0
+    symbols_indexed: int = 0
+    edges_indexed: int = 0
     paths_skipped: int = 0
     binary_blobs_skipped: int = 0
     lines_indexed: int = 0
@@ -143,6 +147,16 @@ def _sync_locked(repo, root: Path, store: SQLiteIndexStore, stats: SyncStats) ->
 
     store.map_files(INDEXED_REF, file_map)
     stats.files_mapped = len(file_map)
+
+    # Phase 4: symbols/edges are a pure function of the active mapping and are
+    # recomputed + replaced every sync (repograph/graph/index.py, DECISIONS
+    # D19). Chunks/embeddings above stay incremental — that is the §4 insight.
+    graph_blobs = {
+        blob: read_blob(repo, blob)
+        for path, blob in file_map.items()
+        if graph_language(path) is not None
+    }
+    stats.symbols_indexed, stats.edges_indexed = sync_graph(store, file_map, graph_blobs)
 
     store.set_meta("last_sync", datetime.now(timezone.utc).isoformat())
     store.set_meta("last_sync_head", stats.head or "")
