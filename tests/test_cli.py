@@ -42,6 +42,19 @@ def test_unimplemented_subcommand_exits_nonzero() -> None:
     assert "not implemented" in result.stderr
 
 
+def test_serve_reports_missing_retrieval_pipeline() -> None:
+    """Phase 4 wires `serve`; until Phase 3 merges it must explain what's
+    missing (never serve mock data) and exit 2."""
+    result = subprocess.run(
+        [sys.executable, "-m", "repograph.cli", "serve", "."],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 2
+    assert "retrieval pipeline" in result.stderr
+    assert "Phase 3" in result.stderr
+
+
 def test_version_flag() -> None:
     from repograph import __version__
 

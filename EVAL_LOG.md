@@ -28,3 +28,21 @@ parsing + cAST split-then-merge on the hot path for Py/TS:
 
 Target ≥ 2,000 LOC/s: **PASS** (~75×). Parsing costs ~25% vs the line-window
 chunker; full suite (88 tests incl. golden) green.
+
+## 2026-07-04 — Phase 4 (graph-mcp worktree, pre-rebase) — informational retrieval baseline
+Naive keyword retriever (tests/simple_retriever.py: router + term-count FTS,
+no embeddings/reranker) on eval/gold_queries.jsonl over the miniproject
+fixture, via eval/run_eval.py `evaluate()`:
+
+| metric | value |
+|---|---|
+| recall@5 | 0.680 |
+| MRR | 0.620 |
+| p50 warm | 0.3 ms |
+| p95 warm | 0.4 ms |
+| recall by type | nl 0.57 · stacktrace 0.50 · symbol 1.00 |
+
+NOT a gate run (thresholds apply to the Phase 3 hybrid pipeline). Recorded
+as the floor the real pipeline must clearly beat; misses were q03 q04 q05
+q07 q10 q14 q22 q24 (all natural-language/stack-trace queries — semantic
+search is exactly what's missing).

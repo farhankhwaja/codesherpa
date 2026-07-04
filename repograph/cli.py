@@ -40,7 +40,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_search.add_argument("--budget-tokens", type=int, default=4000, help="Token budget for packed results.")
 
     sub.add_parser("status", help="Index freshness, counts, last sync.")
-    sub.add_parser("serve", help="Run the MCP stdio server.")
+
+    p_serve = sub.add_parser("serve", help="Run the MCP stdio server.")
+    p_serve.add_argument("path", nargs="?", default=".", help="Repository root (default: cwd).")
+
     sub.add_parser("bench", help="Run indexing/retrieval benchmarks.")
 
     return parser
@@ -119,6 +122,11 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_sync(args)
     if args.command == "status":
         return _cmd_status(args)
+
+    if args.command == "serve":
+        from repograph.mcp_server.__main__ import main as serve_main
+
+        return serve_main([args.path])
 
     phase = _PHASE_OF[args.command]
     print(

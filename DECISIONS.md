@@ -124,3 +124,40 @@ prebuilt fixtures; conftest.py edited under fixtures-infrastructure ownership.
 (d) `golden_state()` refactored to a declarative `GOLDEN_PROJECTION` extractor
 map. Phases 3 and 4 MUST extend it (embeddings; symbols+edges) and hold an
 explicit ownership exception to edit that map/their extractors only.
+
+## D15 — graph/ reads git via subprocess plumbing, not pygit2 (Phase 4)
+`graph/gitio.py` uses `git ls-tree` / `cat-file --batch` / `log` for the
+read-only needs of extraction, recency ranking, and `get_recent_changes`.
+Reasons: (a) gitlayer/ (the pygit2 owner, §8) belongs to core-index and had
+not merged when graph-mcp was built; (b) these are four tiny read paths.
+This is the §9 fallback (pygit2 → subprocess git): `TODO(upgrade)` marker in
+gitio.py — route through gitlayer after merge. (Numbered D5 in the graph-mcp
+worktree before rebase; renumbered when core-index's D5–D14 merged first.)
+
+## D16 — Call/reference resolution: language-family fence + generic-name stoplist (Phase 4)
+Best-effort resolution (§7.3: same file → same package → imports; no type
+inference) produced two systematic false-edge classes on the fixture:
+(1) cross-language hits (`urllib.request` in Python resolving to the unique
+TS `request()`), fixed by only resolving across files within a language
+family (python | ecma); (2) receiver-blind builtin method names
+(`payload.get(...)` resolving to `MemoCache.get`), fixed by a stoplist of
+~60 dict/list/str/Array/Promise/console method names that never resolve
+beyond a same-file definition or an explicit import. Cost: one true edge on
+the fixture (`_user_cache.get` → `MemoCache.get`); gain: every observed
+false edge. Precision wins for ranked get_callers output.
+
+## D17 — Eval factory contract and gate shape (Phase 4 builds the harness, Phase 3 runs it)
+`eval/run_eval.py` gates on a retriever factory `(repo_path, mode) ->
+Retriever` with mode ∈ {hybrid, bm25, vector}; default dotted path
+`repograph.retrieve:build_eval_retriever` (Phase 3 must provide it — proposed
+in PROGRESS.md). Thresholds are module constants (0.80/0.60, §13) with no
+CLI override, so they cannot be lowered without a diff in this file. Hit
+definition: a top-5 result whose `chunk.file_path` is in the gold entry's
+`expected_files`.
+
+## D18 — MCP search_code budget bounds the whole response (Phase 4)
+`PackedContext.total_tokens ≤ budget` bounds chunk content, but the JSON
+envelope (breadcrumbs, expand_ids, rationale) added ~40 % on top, breaching
+the "<4000 tokens default" criterion. The server now trims trailing results
+until the *serialized response* fits the budget and reports `truncated: n`.
+Token frugality is the product; the envelope is not free.

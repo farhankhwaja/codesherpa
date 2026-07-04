@@ -2,7 +2,10 @@
 
 Deliberately subprocess-based and minimal: Phase 4 only needs to *read*
 trees, blobs, and history. Full repo tracking (hooks, sync, pygit2) is the
-git layer's job (``repograph/gitlayer``, Phase 1). See DECISIONS.md.
+git layer's job (``repograph/gitlayer``, Phase 1). See DECISIONS.md D5.
+
+TODO(upgrade): once gitlayer (pygit2) merges, route these reads through it
+and delete this module (§9 fallback ladder: pygit2 -> subprocess git).
 """
 
 from __future__ import annotations
