@@ -4,7 +4,10 @@ We deliberately avoid a tokenizer dependency (none is on the approved stack,
 CLAUDE.md §6). Code averages roughly 3.5-4 characters per token across common
 BPE vocabularies; we use ceil(len/4) plus a small per-line overhead so the
 estimate errs slightly high — the packer must NEVER exceed the caller's
-budget, so over-estimating is the safe direction. See DECISIONS.md.
+budget, so over-estimating is the safe direction. See DECISIONS.md D5.
+
+TODO(upgrade): swap in exact token counting if a tokenizer dependency is
+ever added to the approved stack.
 """
 
 from __future__ import annotations

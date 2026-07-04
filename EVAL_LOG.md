@@ -106,4 +106,8 @@ queries. Integration re-run against the real store is required before merge.
 | reranker | recall@5 | MRR | p95 warm |
 |---|---|---|---|
 | ms-marco-MiniLM-L-6-v2 (chosen) | 1.00 | 0.873 | 444 ms |
-| bge-reranker-v2-m3 (§6 primary) | (pending — appended below when the 2.3 GB run completes) | | |
+| bge-reranker-v2-m3 (§6 primary) | 1.00 | 0.907 | 6696 ms |
+
+bge-reranker-v2-m3 wins on MRR (+0.034) but is 13× over the §13 500 ms warm
+p95 gate on CPU (568M params) — §9 fallback to the MiniLM cross-encoder taken,
+`TODO(upgrade)` recorded (D9): revisit bge on GPU/quantized runtimes.
