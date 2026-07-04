@@ -80,17 +80,31 @@ def test_stdio_server_every_tool_end_to_end(synced_miniproject: tuple[Path, Path
                 assert "query" in by_name["search_code"].inputSchema["properties"]
                 assert "symbol" in by_name["get_callers"].inputSchema["properties"]
 
-                # search_code — default budget bounds the whole response
+                # search_code — compact-first (D39): 1500-token default budget
+                # bounds the whole response; rows are signature/breadcrumb +
+                # expand_id handles, no code bodies unless include_code
                 result = await session.call_tool(
                     "search_code", {"query": "where is the retry logic for http requests"}
                 )
                 payload = _payload(result)
                 assert payload["results"]
-                assert payload["total_tokens"] <= payload["budget_tokens"] == 4000
-                assert estimate_tokens(_text(result)) < 4000
+                assert payload["total_tokens"] <= payload["budget_tokens"] == 1500
+                assert estimate_tokens(_text(result)) < 1500
                 for row in payload["results"]:
                     assert row["expand_id"]
+                    assert row["breadcrumb"]
+                    assert "code" not in row  # compact-first: bodies via expand()
                     assert row["why"] in {"bm25", "vector", "symbol", "expansion"}
+
+                # include_code=true restores full-body rows on demand
+                verbose = _payload(
+                    await session.call_tool(
+                        "search_code",
+                        {"query": "where is the retry logic for http requests",
+                         "include_code": True},
+                    )
+                )
+                assert any("code" in row for row in verbose["results"])
 
                 # get_definition
                 payload = _payload(

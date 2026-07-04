@@ -579,3 +579,14 @@ during this investigation was a stale PRE-fix init process that had kept
 running and was killed at 10.5 GB — the timed post-fix runs are the ones
 above. The Phase 6 verifier's exploratory attacks must include a clean-clone
 `sherpa init` with a memory ceiling.
+
+## D39 — Compact-first search_code (human's B3 decision, Phase 6)
+The human resolved BLOCKED B3: ship the token-diet as a product change and
+re-measure. `search_code` now defaults to a **1500-token budget** and
+returns **signature/breadcrumb + expand_id rows with no code bodies**
+(`include_code=true` restores full rows); the tool description steers the
+agent to expand() only the 1–2 hits that matter. Response-envelope trimming
+(D18) unchanged and now binds at 1500. The frozen Retriever contract is
+untouched (its search() default stays 4000 — this is MCP-layer presentation).
+Measured in the A/B v2 rerun on the same 21 frozen tasks (EVAL_LOG; v1 entry
+untouched per the harness honesty rules).
