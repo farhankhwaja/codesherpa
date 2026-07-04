@@ -158,7 +158,8 @@ def create_server(
             status["head"] = None
         if store is not None:
             status["active_blobs"] = len(store.active_blobs())
-            status["last_sync_ref"] = store.get_meta("last_sync_ref")
+            status["last_sync"] = store.get_meta("last_sync")
+            status["last_sync_head"] = (store.get_meta("last_sync_head") or "")[:12] or None
             status["indexed_files"] = len(store.files_for_ref("HEAD"))
         else:
             status["note"] = "no index store attached"

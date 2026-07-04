@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -46,3 +47,23 @@ def miniproject(tmp_path_factory: pytest.TempPathFactory) -> Path:
     if not _is_built(MINIPROJECT_DIR, builder):
         builder.build(MINIPROJECT_DIR)
     return MINIPROJECT_DIR
+
+
+@pytest.fixture(scope="session")
+def synced_miniproject(
+    miniproject: Path, tmp_path_factory: pytest.TempPathFactory
+) -> tuple[Path, Path]:
+    """(repo_clone, db_path): the fixture indexed by the REAL sync pipeline.
+
+    Session-scoped and shared — treat the store as read-only; tests that
+    mutate index state must sync their own clone. (Phase 4 addition.)
+    """
+    from repograph.gitlayer.sync import sync
+
+    tmp = tmp_path_factory.mktemp("synced-miniproject")
+    repo = tmp / "repo"
+    shutil.copytree(miniproject, repo)
+    shutil.rmtree(repo / ".repograph", ignore_errors=True)
+    db = tmp / "index.db"
+    sync(repo, db)
+    return repo, db

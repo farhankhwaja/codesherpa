@@ -1,8 +1,9 @@
-"""Phase 4: eval harness unit tests (metric math, gate, CLI plumbing).
+"""Phase 4: eval harness unit tests (metric math, gate, CLI plumbing),
+plus the §10/§13 graph-expansion delta on the real store.
 
-The harness itself gates Phase 3 (retrieval pipeline); here we prove its
-math and its exit behavior with controlled fake retrievers, plus a smoke
-run over the in-memory store.
+The recall/MRR thresholds gate Phase 3 (retrieval pipeline); here we prove
+the harness math and exit behavior with controlled fake retrievers, and run
+the expansion-on vs expansion-off comparison over the real SQLite index.
 """
 
 from __future__ import annotations
@@ -14,10 +15,10 @@ from pathlib import Path
 
 import pytest
 
-from inmemory_store import InMemoryIndexStore, populate_store
 from repograph.contracts.retrieval_contract import Retriever
 from repograph.contracts.types import Chunk, PackedContext, RetrievalSource, SearchResult
 from repograph.graph.view import SymbolGraph
+from repograph.store.sqlite_store import SQLiteIndexStore
 from simple_retriever import SimpleRetriever
 
 ROOT = Path(__file__).parent.parent
@@ -155,13 +156,36 @@ def test_cli_pass_and_fail_paths(miniproject: Path):
     assert run_eval.main(argv) == 1
 
 
-def test_smoke_simple_retriever_on_fixture(miniproject: Path):
-    """Informational: the naive test retriever produces sane metrics."""
-    store = InMemoryIndexStore()
-    populate_store(store, miniproject)
-    retriever = SimpleRetriever(store, SymbolGraph(store))
-    gold = run_eval.load_gold(GOLD_PATH)
-    report = run_eval.evaluate(retriever, gold)
-    assert 0.0 <= report.recall_at_k <= 1.0
-    assert 0.0 <= report.mrr <= report.recall_at_k
-    assert report.p50_ms <= report.p95_ms
+def test_smoke_simple_retriever_on_real_store(synced_miniproject: tuple[Path, Path]):
+    """Informational: the naive test retriever over the real index produces
+    sane metrics."""
+    _repo, db = synced_miniproject
+    store = SQLiteIndexStore(db)
+    try:
+        retriever = SimpleRetriever(store, SymbolGraph(store))
+        gold = run_eval.load_gold(GOLD_PATH)
+        report = run_eval.evaluate(retriever, gold)
+        assert 0.0 <= report.recall_at_k <= 1.0
+        assert 0.0 <= report.mrr <= report.recall_at_k
+        assert report.p50_ms <= report.p95_ms
+    finally:
+        store.close()
+
+
+def test_graph_expansion_does_not_reduce_recall(synced_miniproject: tuple[Path, Path]):
+    """§10 Phase 4 / §13: graph expansion (config flag) must not reduce
+    recall@5. Runs on the harness stand-in retriever over the real store;
+    Phase 3 re-runs this comparison inside the production pipeline."""
+    _repo, db = synced_miniproject
+    store = SQLiteIndexStore(db)
+    try:
+        graph = SymbolGraph(store)
+        gold = run_eval.load_gold(GOLD_PATH)
+        base = run_eval.evaluate(SimpleRetriever(store, graph, expansion=False), gold)
+        expanded = run_eval.evaluate(SimpleRetriever(store, graph, expansion=True), gold)
+        assert expanded.recall_at_k >= base.recall_at_k, (
+            f"expansion reduced recall@5: {base.recall_at_k:.3f} -> "
+            f"{expanded.recall_at_k:.3f}"
+        )
+    finally:
+        store.close()

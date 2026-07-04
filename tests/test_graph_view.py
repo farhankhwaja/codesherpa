@@ -1,7 +1,8 @@
 """Phase 4: ranked graph queries (get_callers / get_references / definition).
 
 CLAUDE.md §10 Phase 4: "get_callers returns ranked results with rationale
-fields." Uses the in-memory IndexStore double (real store lands with Phase 1).
+fields" (§7.3 ranking: same-package proximity, reference count, recency).
+Runs against the REAL SQLite store populated by the real sync pipeline.
 """
 
 from __future__ import annotations
@@ -10,7 +11,6 @@ from pathlib import Path
 
 import pytest
 
-from inmemory_store import InMemoryIndexStore, populate_store
 from repograph.contracts.types import (
     Chunk,
     Edge,
@@ -21,13 +21,15 @@ from repograph.contracts.types import (
 )
 from repograph.graph.gitio import last_change_dates
 from repograph.graph.view import SymbolGraph
+from repograph.store.sqlite_store import SQLiteIndexStore
 
 
 @pytest.fixture(scope="module")
-def graph(miniproject: Path) -> SymbolGraph:
-    store = InMemoryIndexStore()
-    populate_store(store, miniproject)
-    return SymbolGraph(store, recency=last_change_dates(miniproject))
+def graph(synced_miniproject: tuple[Path, Path]):
+    repo, db = synced_miniproject
+    store = SQLiteIndexStore(db)
+    yield SymbolGraph(store, recency=last_change_dates(repo))
+    store.close()
 
 
 def _paths(results):
@@ -53,6 +55,7 @@ def test_get_callers_is_ranked_with_rationale(graph: SymbolGraph):
         assert result.rationale, "every caller carries a rationale"
         assert "calls retry_request" in result.rationale
         assert "inbound refs" in result.rationale
+        assert "last changed" in result.rationale  # recency wired from git
         assert result.expand_id == result.chunk.chunk_id
         assert result.token_count > 0
         assert result.source is RetrievalSource.SYMBOL
@@ -95,9 +98,9 @@ def test_neighbors_expansion(graph: SymbolGraph):
         assert result.source is RetrievalSource.EXPANSION
 
 
-def test_recency_breaks_ties():
-    """Two callers identical except recency: the newer file ranks first."""
-    store = InMemoryIndexStore()
+def _tiny_store(db_path: Path) -> SQLiteIndexStore:
+    """Synthetic three-node graph on the REAL store implementation."""
+    store = SQLiteIndexStore(db_path)
     blob = {"t": "a" * 40, "old": "b" * 40, "new": "c" * 40}
     target = SymbolNode("t_func", SymbolKind.FUNCTION, blob["t"], 0, 10, "pkg/t.py")
     old_caller = SymbolNode("old_caller", SymbolKind.FUNCTION, blob["old"], 0, 10, "pkg/old.py")
@@ -124,19 +127,30 @@ def test_recency_breaks_ties():
             Edge(new_caller.node_id, target.node_id, EdgeKind.CALLS),
         ]
     )
-    graph = SymbolGraph(
-        store, recency={"pkg/old.py": "2023-01-01", "pkg/new.py": "2024-06-01"}
-    )
-    results = graph.get_callers("t_func")
-    assert _paths(results) == ["pkg/new.py", "pkg/old.py"]
-    assert "last changed 2024-06-01" in (results[0].rationale or "")
+    return store
 
 
-def test_deactivated_blobs_disappear_from_queries(graph: SymbolGraph, miniproject: Path):
-    store = InMemoryIndexStore()
-    populate_store(store, miniproject)
-    view = SymbolGraph(store)
-    assert view.get_definition("validate_title")
-    validators_blob = view.get_definition("validate_title")[0].chunk.blob_hash
-    store.set_blobs_active([validators_blob], False)
-    assert view.get_definition("validate_title") == []
+def test_recency_breaks_ties(tmp_path: Path):
+    """Two callers identical except recency: the newer file ranks first."""
+    store = _tiny_store(tmp_path / "tiny.db")
+    try:
+        graph = SymbolGraph(
+            store, recency={"pkg/old.py": "2023-01-01", "pkg/new.py": "2024-06-01"}
+        )
+        results = graph.get_callers("t_func")
+        assert _paths(results) == ["pkg/new.py", "pkg/old.py"]
+        assert "last changed 2024-06-01" in (results[0].rationale or "")
+    finally:
+        store.close()
+
+
+def test_deactivated_blobs_disappear_from_queries(tmp_path: Path):
+    store = _tiny_store(tmp_path / "tiny.db")
+    try:
+        view = SymbolGraph(store)
+        assert view.get_definition("t_func")
+        target_blob = view.get_definition("t_func")[0].chunk.blob_hash
+        store.set_blobs_active([target_blob], False)
+        assert view.get_definition("t_func") == []
+    finally:
+        store.close()
