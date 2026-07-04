@@ -161,3 +161,44 @@ envelope (breadcrumbs, expand_ids, rationale) added ~40 % on top, breaching
 the "<4000 tokens default" criterion. The server now trims trailing results
 until the *serialized response* fits the budget and reports `truncated: n`.
 Token frugality is the product; the envelope is not free.
+
+## D19 — Graph tables are recomputed and replaced on every sync (Phase 4)
+Symbols/edges are a *global* function of the active path→blob mapping:
+adding one file can re-resolve an unchanged file's calls (same-package and
+family-unique rules), and module names/packages derive from paths. Appending
+rows per new blob therefore cannot keep incremental == rebuild — proven by
+`test_new_file_rebinds_existing_callers`. So `graph/index.py::sync_graph`
+(called at the end of every `gitlayer.sync`) re-extracts the active set and
+REPLACES the two graph tables; the Golden Test's new `symbols`/`edges`
+projections compare the whole tables and hold by construction (GOLDEN_DEEP
+soak 25/25 green). Cost: one tree-sitter reparse of the active set per sync
+(~150k LOC/s per Phase 2 numbers) while chunks/embeddings — the expensive
+per-blob work — stay incremental, preserving the §4 insight.
+`TODO(upgrade)` in graph/index.py: persist per-blob extraction facts so only
+cross-file resolution reruns. The two `DELETE` statements use `store.conn`
+directly: the write side of the indexing pipeline is already concrete-bound
+(gitlayer constructs SQLiteIndexStore; map_files uses DELETE internally);
+every query path (SymbolGraph/MCP/retrieval) remains ABC-only per the
+contract. Also closes pre-merge verifier advisory A1: sync's skip rules
+(>2 MiB, vendored, binary — D9) now shield graph extraction by construction.
+
+## D20 — MCP tests consolidated onto the real stdio transport (Phase 4)
+The pre-merge suite had 11 per-tool tests over the SDK's in-memory session.
+Integration now demands the real transport, so the per-tool tests were
+folded — assertions intact — into one stdio session test
+(`test_stdio_server_every_tool_end_to_end`, subprocess server over the real
+SQLite index) exercising every §7.6 tool; only edge cases (bad ref, tiny
+budget, unknown expand_id, router path) stay on the in-memory session for
+speed. Test COUNT went down; assertion coverage went up (real transport,
+real store). Not a §2.1 weakening: nothing tested before is untested now.
+
+## D21 — Gold set gains nl_hard and decoy query types (Phase 4)
+`nl_hard` (8): wording shares zero identifier subtokens with the target
+file — enforced forever by
+`test_nl_hard_queries_share_no_identifier_tokens_with_targets`. `decoy` (2):
+words lexically match a WRONG file (verified: term-count FTS ranks users.py
+/ store.ts first). Baseline stand-in retriever scores 0.12 recall@5 on
+nl_hard — these queries measure exactly what embeddings must add in Phase 3.
+`VALID_TYPES` in test_gold_queries.py was extended (not relaxed): the
+type-mix test now REQUIRES all five styles, and the minimum entry count rose
+20 → 35. Additive eval-strengthening per §13.

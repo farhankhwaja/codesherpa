@@ -1,64 +1,73 @@
 # Progress
 
 ## Current phase & worktree
-Phases 0–2 complete and merged to main (plus golden-test hardening D14).
-Phase 4 (Symbol Graph + MCP) integration underway in worktree `graph-mcp`:
-pre-merge build was verifier-PASSed against the contracts + in-memory store;
-now rebased onto main and being wired to the real SQLite store. Phase 3
-(retrieval) runs in parallel in worktree `retrieval`.
+Phase 4 (Symbol Graph + MCP) — implementation COMPLETE in worktree
+`graph-mcp`, integrated with the real store on a rebased main (Phases 0–2 +
+gold-set hardening). Verifier run + §3.3 merge are the remaining steps of
+this session; one criterion is awaiting-human (manual smoke, below).
+Phase 3 (retrieval) proceeds in parallel; per §8 order graph-mcp merges
+before retrieval.
 
 ## Done (one line each, with commit hash)
-- Phase 0: contracts, fixture builder, gold set, verifier agent, PASS — dc77f33
-- Phase 1: SQLite store, gitlayer init/sync + hooks, golden v1, throughput logged, verifier PASS — e1f3c48..b2dfc1a
-- Phase 2: cAST chunker (Py/TS/JS/TSX), verifier PASS after findings fixed — c2caf44..bd05580
-- Golden hardening: real-merge op, GOLDEN_DEEP soak, fixture v2 (+export_tasks.js), GOLDEN_PROJECTION; D14 — c35392a
-- Phase 4 pre-merge, rebased onto main: graph extraction (15 known call edges
-  + import/ref/defines spot-checks), ranked SymbolGraph queries,
-  recent_changes symbol diffs, MCP server (7 tools, SDK in-memory client
-  test), eval harness + ab_harness.md, pre-merge verifier PASS
-  (`verification/phase-4-premerge-report.md`), advisory A2 fixed
+- Phases 0–2 + golden hardening on main — dc77f33..c35392a
+- Gold set hardened: +8 nl_hard (zero identifier-token overlap, ratchet-tested), +2 decoy; 35 entries; merged to main standalone — bb9e0d6
+- Phase 4 rebased onto main; fixture-v2 test adaptations — 16707b2..
+- Symbols/edges indexed through the REAL store on every sync; golden projection extended (symbols+edges; D14 exception exercised, see below); GOLDEN_DEEP 25/25 — ff237f6^..
+- All graph/MCP/eval tests migrated to the real SQLite index; in-memory store deleted — ff237f6
+- MCP integration test over REAL stdio transport (SDK client, subprocess server, every tool) — ff237f6
+- Graph expansion behind config flag; recall@5 delta 0.000 (non-decreasing gate PASS, logged in EVAL_LOG) — ff237f6
+- Suite: 179 tests green incl. golden
 
 ## In progress
-graph-mcp: Phase 4 integration against the real store (this session).
-Next concrete steps: finish rebase → harden gold queries (merge to main
-standalone; retrieval is blocked on it) → index symbols/edges through the
-real store → extend GOLDEN_PROJECTION per D14 exception → full §10 Phase 4
-criteria → verifier → merge per §3.3.
+Phase 4 close-out: verifier → §3.3 checklist → merge `worktree-graph-mcp`
+into main (before retrieval merges, per §8/§3.3 order).
 
 ## Blocked / open questions
-None.
+None blocking. **Awaiting human (Phase 4 manual-smoke checkbox — do NOT mark
+done until a human runs it):**
+
+- [ ] Manual smoke: connect Claude Code to this repo's index and run 3 real
+  queries; paste transcripts into `verification/`.
+  From the repo root (uses the current venv):
+  1. `uv venv --python 3.12 .venv && uv pip install -e ".[dev]" --python .venv/bin/python`
+  2. `.venv/bin/repograph init` (builds `.repograph/index.db` incl. symbols/edges)
+  3. Until Phase 3 merges (no production retriever yet), attach the test
+     wiring: `claude mcp add repograph -- "$PWD/.venv/bin/python" "$PWD/tests/mcp_stdio_entry.py" "$PWD" "$PWD/.repograph/index.db"`
+     (After Phase 3 merges, the canonical form is:
+     `claude mcp add repograph -- "$PWD/.venv/bin/python" -m repograph.mcp_server "$PWD"`.)
+  4. Suggested queries, then paste transcripts to `verification/phase4-smoke/`:
+     - `search_code("how does sync decide which blobs are new")`
+     - `get_callers("sync_graph")` (expect the call site inside gitlayer/sync.py, ranked, with rationale)
+     - `get_recent_changes("HEAD~5")` (expect symbol-level diffs for recent commits)
 
 ## Notes for the next session
+- Ownership exception EXERCISED (granted in test_golden.py + D14, recorded
+  here per instruction): graph-mcp added `_project_symbols`/`_project_edges`
+  and two GOLDEN_PROJECTION entries in tests/test_golden.py — nothing else
+  in that file was touched. Phase 3 still owes the embeddings extractor.
+- Graph design: symbols/edges are recomputed + REPLACED each sync
+  (`graph/index.py`, D19) because edges are a global function of the active
+  mapping; chunks/embeddings stay incremental. TODO(upgrade): persist
+  per-blob extraction facts.
+- Proposals to retrieval worktree (per §8): expose
+  `repograph.retrieve.build_eval_retriever(repo_path, mode)` with
+  mode ∈ {hybrid, bm25, vector} (run_eval default factory, D17) and
+  `build_retriever(repo_path) -> (Retriever, store)` (consumed by
+  `repograph serve` / `python -m repograph.mcp_server`, already wired).
+  Graph-expansion hook for the pipeline: `SymbolGraph.neighbors()`
+  (EXPANSION-tagged, ranked; ×0.6 discount precedent in
+  tests/simple_retriever.py; re-run the expansion delta inside the real
+  pipeline at the Phase 3 eval gate).
+- nl_hard queries score 0.12 recall@5 lexically (by design); the Phase 3
+  hybrid must close that gap to clear the 0.80 gate. Full numbers in
+  EVAL_LOG.md.
 - venv: `uv venv --python 3.12 .venv && uv pip install -e ".[dev]" --python .venv/bin/python`;
-  tests: `PATH="$PWD/.venv/bin:$PATH" .venv/bin/python -m pytest -q` (one CLI
-  test needs the console script on PATH).
-- tree-sitter: use `tree_sitter.Parser(tslp.get_language(name))`, NOT
-  `tslp.get_parser()` (Rust API, incompatible — D10). Python grammar inlines
-  `expression_statement`; TS wraps awaited generic callees in
-  `await_expression` (handled in graph/queries/*.scm).
-- Store implements the frozen `IndexStore` ABC (`store/sqlite_store.py`);
-  Phases 3/4 code against the ABC. vec0 created lazily on first
-  `put_embedding` (dim in meta.vec_dim — D8).
-- Sync tracks ref=HEAD only (D7); binaries never stored (D6); >2MiB skipped
-  (D9); golden equality = ACTIVE projection.
-- Golden projection: Phases 3/4 MUST extend GOLDEN_PROJECTION in
-  tests/test_golden.py (embeddings; symbols+edges) — explicit ownership
-  exception recorded there and in D14. GOLDEN_DEEP=1 soak must pass once
-  before the Phase 5 merge.
-- Fixture is v2 (commit 7 adds webclient/scripts/export_tasks.js; earlier
-  SHAs unchanged; version marker auto-rebuilds stale prebuilt fixtures).
-- Graph resolution precision heuristics: D16 (language-family fence,
-  generic-name stoplist) — precision > recall for get_callers.
-- Phase 3 eval gates (§13): recall@5 ≥0.80, MRR ≥0.60, beat BM25-only and
-  vector-only; p95 <500ms warm, router path <200ms/<50ms. Harness:
-  eval/run_eval.py; factory contract in D17.
-- The in-memory IndexStore + SimpleRetriever live in tests/ (inmemory_store.py,
-  simple_retriever.py) — §2.5: they must never move into repograph/.
-- Naive-retriever baseline on the gold set: recall@5 0.68 / MRR 0.62
-  (EVAL_LOG.md) — the Phase 3 hybrid must beat this comfortably to clear 0.80.
-- Verifier advisory A1 (carry to integration): extract_project has no
-  file-size guard — a 2.8 MB single-line generated JS file takes ~5.5 min.
-  Gitlayer skips >2MiB blobs (D9); confirm that protection shields graph/
-  in the integrated sync path, else add a size guard.
-- `.venv/` is inside each worktree; each worktree makes its own.
+  tests: `PATH="$PWD/.venv/bin:$PATH" .venv/bin/python -m pytest -q`.
+- tree-sitter: use `tree_sitter.Parser(tslp.get_language(name))` (D10);
+  python grammar inlines expression_statement; awaited TS generic callees
+  nest under await_expression (graph/queries/*.scm).
+- Store: `store/sqlite_store.py` implements the frozen ABC; vec0 lazy on
+  first put_embedding (D8); sync tracks HEAD only (D7); >2MiB skipped (D9 —
+  this also shields graph extraction, closing advisory A1).
+- Fixture v2 (7 commits; version marker auto-rebuilds prebuilt copies).
 - GPG signing requires unsandboxed git commits (gpg agent socket).

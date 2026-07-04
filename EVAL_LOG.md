@@ -46,3 +46,27 @@ NOT a gate run (thresholds apply to the Phase 3 hybrid pipeline). Recorded
 as the floor the real pipeline must clearly beat; misses were q03 q04 q05
 q07 q10 q14 q22 q24 (all natural-language/stack-trace queries — semantic
 search is exactly what's missing).
+
+## 2026-07-04 — Phase 4 — graph integration + hardened gold set (worktree graph-mcp, pre-merge)
+
+Gold set hardened to 35 queries (+8 nl_hard vocabulary-mismatch, +2 decoy;
+merged to main separately as bb9e0d6). Stand-in retriever = tests-only
+SimpleRetriever (router + FTS5 bm25, no embeddings/reranker) over the REAL
+SQLite index built by real sync; via eval/run_eval.py `evaluate()`:
+
+| metric | expansion OFF | expansion ON |
+|---|---|---|
+| recall@5 | 0.686 | 0.686 |
+| MRR | 0.649 | 0.649 |
+| p50 / p95 warm | 0.1 / 0.2 ms | 0.4 / 0.6 ms |
+| recall by type | nl 0.93 · nl_hard 0.12 · decoy 0.50 · symbol 1.00 · stacktrace 0.50 | identical |
+
+Phase 4 §13 gate — graph expansion must not reduce recall@5: **PASS**
+(delta 0.000; also asserted permanently by
+tests/test_run_eval.py::test_graph_expansion_does_not_reduce_recall).
+NOT a Phase 3 gate run: recall/MRR thresholds bind the hybrid pipeline.
+nl_hard at 0.12 for a lexical retriever is by design — it is the headroom
+embeddings must close.
+
+Golden Test with symbols+edges projections: default run green; GOLDEN_DEEP=1
+soak green (25/25 randomized examples, this workstation).
