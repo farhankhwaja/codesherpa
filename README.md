@@ -73,7 +73,8 @@ real Flask history).
              └──────────────────┼────────────────┘
                  ┌──────────────▼───────────────┐
                  │  cAST chunker (tree-sitter)  │  structure-aware chunks,
-                 │  Python · TS · JS · TSX      │  byte-exact, deterministic
+                 │ Py · TS · JS · TSX · Go ·    │  byte-exact, deterministic
+                 │ proto                        │
                  └──────────────┬───────────────┘
                  ┌──────────────▼───────────────┐
                  │  git layer (blob-hash keyed) │  hooks + incremental sync
@@ -81,7 +82,10 @@ real Flask history).
 ```
 
 Chunking is [cAST](https://arxiv.org/abs/2506.15655) (split-then-merge over
-the AST) with breadcrumb headers (`path :: Class :: def method(...)`).
+the AST) with breadcrumb headers (`path :: Class :: def method(...)`;
+Go methods carry their package-qualified receiver:
+`path :: (pkg.Store) :: func (s *Store) Save(...)`). Protocol Buffers get
+first-class chunks and symbols too (message/service/enum/rpc).
 Embeddings: `nomic-embed-text-v1.5` (default; `all-MiniLM-L6-v2` is one
 config line away and embeds ~30–40× faster at a small hybrid-recall cost).
 Reranker: `ms-marco-MiniLM-L-6-v2` cross-encoder. Everything runs local,
@@ -175,8 +179,8 @@ choice), `EVAL_LOG.md` (append-only benchmark record). See CONTRIBUTING.md.
 
 ## Roadmap
 
-- Language connectors beyond Py/TS/JS/TSX (a language = one tree-sitter
-  query file)
+- Language connectors beyond Py/TS/JS/TSX/Go/proto (a language = one
+  tree-sitter query file — Go landed exactly this way; see DECISIONS D43)
 - bge-class rerankers on GPU/quantized runtimes (`TODO(upgrade)` markers)
 - `sherpa bench` CLI wrapper; per-blob graph extraction cache
   (`TODO(upgrade)` in graph/index.py)

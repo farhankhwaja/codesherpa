@@ -1,10 +1,11 @@
 # Progress
 
 ## Current phase & worktree
-Phase A (Go language support) on branch `feature/go-support` — merge-ready,
-verifier PASS committed; delivering via PR to main (repo is public; main
-stays releasable, no direct commits). Phase B (large-repo validation on the
-~358k-LOC TS+Go monorepo) starts on `bench/large-repo` AFTER the PR merges.
+Merging to main: Phase A (Go support, verifier PASS at 043ece3) +
+`fix/go-symbol-repetition` (proto support D44; router anti-hijack,
+size-aware blend, package-qualified Go receiver breadcrumbs D45).
+Open: large-regime blend weight is TODO(upgrade) — revalidate on a public
+large repo with a tuning/held-out gold split (prior venue retracted).
 Prior state: ALL SHIPPED PHASES COMPLETE — Phase 6 merged to main with final whole-repo Verifier
 PASS (verification/phase-6-report.md; FAIL round on one README number
 preserved alongside). Project shipped as: PyPI dist + package `codesherpa`,

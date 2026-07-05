@@ -39,7 +39,10 @@ the same suite (`.github/workflows/ci.yml`).
 One tree-sitter grammar entry in `codesherpa/chunker/languages.py` (cAST
 chunking) plus one query file under `codesherpa/graph/queries/` (symbols /
 references / calls). Unparseable files already fall back to line windows —
-the indexer must never crash on weird input.
+the indexer must never crash on weird input. Go (PR: feature/go-support) is
+the reference example: `go.scm` + one LanguageSpec, plus optional
+language-specific capture families (`@method.receiver`, `@call.recv`,
+`@bind.*`) that the extractor understands generically.
 
 ## Sign-off required (DCO)
 
