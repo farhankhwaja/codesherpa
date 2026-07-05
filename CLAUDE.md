@@ -1,10 +1,10 @@
-# CLAUDE.md — repograph
+# CLAUDE.md — sherpa (package: codesherpa)
 
 > **Read this entire file before doing anything. Every session, every subagent, every time.**
 
 ## 1. Mission
 
-Build **repograph**: an open-source, local-first, git-native codebase index that any LLM agent can use via MCP to retrieve exactly the code context it needs — cutting token usage 60–90% on navigation-heavy tasks (debugging, triage, feature work) while improving answer quality.
+Build **sherpa** (package/imports: `codesherpa`; CLI/MCP: `sherpa`): an open-source, local-first, git-native codebase index that any LLM agent can use via MCP to retrieve exactly the code context it needs — cutting token usage 60–90% on navigation-heavy tasks (debugging, triage, feature work) while improving answer quality.
 
 One-line pitch: *A git-native, self-updating structural memory for your codebase. Index once, stay fresh forever, spend far fewer tokens on context.*
 
@@ -13,7 +13,7 @@ Reference points (study, then beat): Aider's repo-map, codebase-memory-mcp, Unbl
 ## 2. Non-Negotiable Rules
 
 1. **Tests are a ratchet.** Never delete, skip, weaken, or `xfail` an existing test to make progress. If a test seems wrong, fix the code first; only change the test if you can prove in `DECISIONS.md` why the test itself was incorrect.
-2. **Interface contracts are frozen.** Files in `repograph/contracts/` may not be modified by any session or subagent. If a contract is genuinely blocking, write the problem to `BLOCKED.md`, commit, and stop that phase.
+2. **Interface contracts are frozen.** Files in `codesherpa/contracts/` may not be modified by any session or subagent. If a contract is genuinely blocking, write the problem to `BLOCKED.md`, commit, and stop that phase.
 3. **The Golden Test is sacred.** `tests/test_golden.py` (incremental index == full rebuild) must exist before the indexer is written and must pass before every merge to main. A stale index is worse than no index.
 4. **Commit at every green milestone.** Small commits, descriptive messages, conventional-commit style (`feat:`, `fix:`, `test:`, `perf:`).
 5. **No mock data in production paths.** Mocks live only in `tests/`. Never fake an embedding, search result, or index entry to make something "work."
@@ -55,7 +55,7 @@ You MAY merge a phase branch/worktree into `main` without human review **only if
 - [ ] Golden Test passes: `pytest tests/test_golden.py -q`
 - [ ] Eval thresholds for the current phase are met (§13) and scores are appended to `EVAL_LOG.md`
 - [ ] Verifier agent returned PASS (§11) and its report is committed to `verification/phase-N-report.md`
-- [ ] No files under `repograph/contracts/` were modified
+- [ ] No files under `codesherpa/contracts/` were modified
 - [ ] `PROGRESS.md` and `DECISIONS.md` are updated
 
 If any box is unchecked, do NOT merge. Write `BLOCKED.md` with a precise description and stop that line of work. Merge order when multiple worktrees are ready: `core-index` → `graph-mcp` → `retrieval` (schema owner merges first); rebase later branches onto main before merging.
@@ -87,7 +87,7 @@ If any box is unchecked, do NOT merge. Write `BLOCKED.md` with a precise descrip
 │            │            │               │           │  calls/imports)│
 └─────┬──────┘            └───────┬───────┘           └───────┬───────┘
       └───────────────────────────┼───────────────────────────┘
-                                  │  one SQLite file: .repograph/index.db
+                                  │  one SQLite file: .sherpa/index.db
                     ┌─────────────▼──────────────┐
                     │  cAST Chunker (tree-sitter) │
                     └─────────────┬──────────────┘
@@ -102,15 +102,15 @@ If any box is unchecked, do NOT merge. Write `BLOCKED.md` with a precise descrip
 ## 5. Repository Layout
 
 ```
-repograph/
+repograph/                     # working dir name; GitHub repo: codesherpa
 ├── CLAUDE.md                  # this file
 ├── PROGRESS.md                # living status — every session updates it
 ├── DECISIONS.md               # every non-obvious choice, with reasoning
 ├── EVAL_LOG.md                # append-only eval scores per commit
 ├── BLOCKED.md                 # only exists when something needs the human
-├── pyproject.toml             # single package, pip-installable, console script `repograph`
+├── pyproject.toml             # single package, pip-installable, console script `sherpa` (PyPI/dist name `codesherpa`)
 ├── README.md                  # written last (Phase 6), with real benchmark numbers
-├── repograph/
+├── codesherpa/
 │   ├── contracts/             # FROZEN interfaces (Phase 0 writes, no one edits)
 │   │   ├── index_contract.py
 │   │   ├── retrieval_contract.py
@@ -148,15 +148,15 @@ repograph/
 | FS watch (optional, Phase 5) | `watchdog` | hooks-only |
 | Tests | `pytest`, `hypothesis` for the golden test | — |
 
-Everything must run **fully local, CPU-only** by default. First run may download models; cache them under `~/.cache/repograph/`.
+Everything must run **fully local, CPU-only** by default. First run may download models; cache them under `~/.cache/sherpa/`.
 
 ## 7. Component Specs
 
 ### 7.1 Git Layer (`gitlayer/`)
-- `repograph init` : install hooks (`post-merge`, `post-checkout`, `post-rewrite`, `post-commit`) that call `repograph sync --quiet`; create `.repograph/` (add to `.gitignore` automatically); run first full index.
-- `repograph sync` : diff current `HEAD` tree (plus, if configured, working-tree files) against the set of blob hashes already indexed. Index new blobs; mark rows for blobs no longer reachable from any indexed ref as inactive (don't delete — cheap branch switching). Must be idempotent and safe to run concurrently (use a lockfile).
+- `sherpa init` : install hooks (`post-merge`, `post-checkout`, `post-rewrite`, `post-commit`) that call `sherpa sync --quiet`; create `.sherpa/` (add to `.gitignore` automatically); run first full index.
+- `sherpa sync` : diff current `HEAD` tree (plus, if configured, working-tree files) against the set of blob hashes already indexed. Index new blobs; mark rows for blobs no longer reachable from any indexed ref as inactive (don't delete — cheap branch switching). Must be idempotent and safe to run concurrently (use a lockfile).
 - Track per-file: path ↔ blob hash mapping per ref, language, mtime.
-- Respect `.gitignore` and a `.repographignore`; skip binaries, vendored dirs, generated code (lockfiles, minified JS, `node_modules`, `dist`).
+- Respect `.gitignore` and a `.sherpaignore`; skip binaries, vendored dirs, generated code (lockfiles, minified JS, `node_modules`, `dist`).
 
 ### 7.2 Chunker (`chunker/`) — implement cAST, not naive splitting
 Algorithm (split-then-merge over the tree-sitter AST):
@@ -222,7 +222,7 @@ A phase is COMPLETE only when every criterion passes **from a clean checkout** a
 
 ### Phase 0 — Skeleton & Contracts (main, single session, ~small)
 Goal: freeze the shape so three sessions can build without colliding.
-- [ ] `pyproject.toml` installs; `repograph --help` runs
+- [ ] `pyproject.toml` installs; `sherpa --help` runs
 - [ ] `contracts/types.py` defines `Chunk`, `SymbolNode`, `Edge`, `SearchResult`, `PackedContext` (dataclasses, fully typed)
 - [ ] `contracts/index_contract.py` defines `IndexStore` ABC (add/lookup/deactivate blobs, chunk & symbol CRUD, FTS + vector query methods)
 - [ ] `contracts/retrieval_contract.py` defines `Retriever` ABC (`search`, `get_definition`, `get_callers`, `get_references`, `expand`)
@@ -232,9 +232,9 @@ Goal: freeze the shape so three sessions can build without colliding.
 
 ### Phase 1 — Git Layer + Store (worktree: core-index)
 Goal: blob-hash-keyed SQLite store with correct incremental sync.
-- [ ] `repograph init` on the fixture creates `.repograph/index.db`, installs all four hooks, updates `.gitignore`
+- [ ] `sherpa init` on the fixture creates `.sherpa/index.db`, installs all four hooks, updates `.gitignore`
 - [ ] Schema: `blobs`, `files(ref,path,blob)`, `chunks`, `chunks_fts` (FTS5), `symbols`, `edges`, `embeddings`, `meta` — documented in `store/schema.sql`
-- [ ] **Golden Test v1** (`hypothesis`-driven): from the fixture, perform a random sequence of ≥10 operations (commit new file, modify, delete, branch, switch, merge, revert); after each, `repograph sync`; final incremental DB state (active blobs, chunks, FTS rows) is **identical** to a from-scratch rebuild at the same HEAD. Runs in CI-time (<120 s).
+- [ ] **Golden Test v1** (`hypothesis`-driven): from the fixture, perform a random sequence of ≥10 operations (commit new file, modify, delete, branch, switch, merge, revert); after each, `sherpa sync`; final incremental DB state (active blobs, chunks, FTS rows) is **identical** to a from-scratch rebuild at the same HEAD. Runs in CI-time (<120 s).
 - [ ] Sync is idempotent: running it twice changes zero rows
 - [ ] Concurrent-safety test: two simultaneous syncs don't corrupt (lockfile)
 - [ ] Indexing throughput measured and logged to `EVAL_LOG.md` (target ≥2000 LOC/s parse+store on fixture-class code, CPU)
@@ -272,7 +272,7 @@ Goal: structural queries + agent-facing server.
 
 ### Phase 5 — Hardening + Full Benchmarks (main, single session)
 Goal: prove the claims.
-- [ ] `repograph init` end-to-end on **two real external repos** (clone e.g. `pallets/flask` and a mid-size TS repo): no crashes, index built, 5 sample queries return sensible results (store transcripts)
+- [ ] `sherpa init` end-to-end on **two real external repos** (clone e.g. `pallets/flask` and a mid-size TS repo): no crashes, index built, 5 sample queries return sensible results (store transcripts)
 - [ ] Cold-index time and index-size-vs-repo-size logged for both
 - [ ] Golden test run against one real repo's recent history (last 30 commits replayed)
 - [ ] `eval/ab_harness.md` executed: same 10 tasks (5 debugging, 5 feature-location) on the fixture+one real repo, Claude Code **with** MCP vs **without**; record tokens per solved task, tool calls, file reads, fallback rate. Target: ≥50% token reduction on solved tasks with no drop in solve rate. Record honestly whatever the numbers are in `EVAL_LOG.md` — do not cherry-pick.
@@ -280,7 +280,7 @@ Goal: prove the claims.
 
 ### Phase 6 — Ship (main)
 - [ ] README: what/why, 3-command quickstart, architecture diagram, **real benchmark table from EVAL_LOG.md**, comparison paragraph vs Aider repo-map / codebase-memory-mcp / Unblocked, roadmap (connectors, Rust port, reranker upgrades)
-- [ ] `pip install -e .` → `repograph init` → `claude mcp add` flow verified from a clean venv, documented exactly
+- [ ] `pip install -e .` → `sherpa init` → `claude mcp add` flow verified from a clean venv, documented exactly
 - [ ] LICENSE (MIT), CONTRIBUTING.md, `.github/workflows/ci.yml` running the full suite
 - [ ] Final Verifier PASS on the whole repo
 
@@ -291,7 +291,7 @@ Create `.claude/agents/verifier.md` in Phase 0 with `isolation: worktree`. The V
 Verifier procedure:
 1. Fresh clean checkout of the branch. `pip install -e .` in a new venv.
 2. Run the full test suite and the phase's specific criteria **literally as written in §10**, checking each box.
-3. Hunt for cheating: grep for skipped/deleted tests vs previous phase (`git diff main -- tests/`), mock objects imported in non-test code, hardcoded fixture paths in `repograph/`, thresholds edited in `eval/`.
+3. Hunt for cheating: grep for skipped/deleted tests vs previous phase (`git diff main -- tests/`), mock objects imported in non-test code, hardcoded fixture paths in `codesherpa/`, thresholds edited in `eval/`.
 4. Run one exploratory attack: e.g. index a file with emoji identifiers, a 5 MB generated JS file, a symlink loop, an empty repo.
 5. Write `verification/phase-N-report.md`: PASS or FAIL with a numbered findings list.
 
