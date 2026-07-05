@@ -48,6 +48,10 @@ the ≥50 % raw-token target stays recorded as missed and moves to the
 roadmap as a large-repo re-measurement. BLOCKED.md deleted per charter.
 
 ## Notes for the next session
+- **Branch protection (2026-07-05): `main` requires PRs — direct pushes are
+  blocked. ALL work, including doc-only fixes, goes through a branch + PR
+  with CI green before merge. No exceptions (the old "doc changes may push
+  straight to main" allowance is revoked).**
 - Names: `pip install codesherpa` → command `sherpa` → `import codesherpa`;
   index `.sherpa/`, ignore file `.sherpaignore`, models `~/.cache/sherpa/`.
 - venv: `uv venv --python 3.12 .venv && uv pip install -e ".[dev]" --python
