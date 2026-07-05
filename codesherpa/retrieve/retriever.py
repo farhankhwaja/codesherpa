@@ -33,7 +33,11 @@ from codesherpa.retrieve.fusion import rrf_fuse
 from codesherpa.retrieve.pack import pack_results
 from codesherpa.retrieve.passages import focus_passage, query_terms
 from codesherpa.retrieve.rerank import CrossEncoderReranker
-from codesherpa.retrieve.router import extract_identifier_tokens, split_identifier
+from codesherpa.retrieve.router import (
+    extract_identifier_tokens,
+    extract_path_segments,
+    split_identifier,
+)
 from codesherpa.retrieve.tokens import result_token_cost
 
 
@@ -62,6 +66,11 @@ class HybridRetriever(Retriever):
         self._embedder = embedder
         self._config = config or RetrievalConfig()
         self._reranker = reranker
+        weight = self._config.rerank_blend_vector_weight
+        if weight is None:  # size-aware auto (D45)
+            small = len(store.active_blobs()) <= RetrievalConfig.SMALL_INDEX_ACTIVE_BLOBS
+            weight = 4.0 if small else 1.0
+        self._blend_vector_weight = float(weight)
         if self._config.rerank_enabled and self._reranker is None:
             self._reranker = CrossEncoderReranker(
                 self._config.reranker_model,
@@ -102,20 +111,63 @@ class HybridRetriever(Retriever):
     # ---------------------------------------------------------------- router
 
     def _router_results(self, query: str) -> list[SearchResult]:
-        """Exact-symbol fast path: definitions + ranked 1-hop neighbors."""
-        results: list[SearchResult] = []
-        seen_chunks: set[str] = set()
+        """Exact-symbol fast path: definitions + ranked 1-hop neighbors.
+
+        Ordering (D45): tokens are processed rarest-first (fewest
+        definitions = most specific), ambiguous convention names last;
+        within a token, definitions whose file path matches a path-like
+        fragment of the query itself (stack traces carry package paths)
+        rank first; each token contributes at most ROUTER_TOKEN_FANOUT
+        definitions."""
+        per_token: list[tuple[str, list[SymbolNode]]] = []
         for token in extract_identifier_tokens(query):
             definitions = self._store.get_definitions(token)
+            if definitions:
+                per_token.append((token, definitions))
+        if not per_token:
+            return []
+
+        original_order = {token: i for i, (token, _) in enumerate(per_token)}
+        per_token.sort(
+            key=lambda td: (
+                len(td[1]) > self._config.router_ambiguous_defs,  # convention names last
+                len(td[1]),  # rarest (most specific) first
+                original_order[td[0]],  # stable for ties
+            )
+        )
+
+        path_segments = extract_path_segments(query)
+
+        def _path_affinity(node: SymbolNode) -> int:
+            best = 0
+            for segment in path_segments:
+                if segment in node.file_path:
+                    return 2  # full fragment match (package path)
+                basename = segment.rsplit("/", 1)[-1]
+                if node.file_path.endswith("/" + basename) or node.file_path == basename:
+                    best = max(best, 1)  # filename match
+            return best
+
+        results: list[SearchResult] = []
+        seen_chunks: set[str] = set()
+        for tier, (token, definitions) in enumerate(per_token):
+            if path_segments:
+                definitions = sorted(
+                    definitions,
+                    key=lambda n: (-_path_affinity(n), n.file_path, n.byte_start),
+                )
+            definitions = definitions[: self._config.router_token_fanout]
+            tier_score = max(0.10, 1.0 - 0.12 * tier)
             for rank, node in enumerate(definitions):
                 chunk = self._chunk_for_symbol(node)
                 if chunk is None or chunk.chunk_id in seen_chunks:
                     continue
                 seen_chunks.add(chunk.chunk_id)
+                score = max(0.05, tier_score - 0.04 * rank)
                 results.append(
                     self._result(
                         chunk,
-                        score=1.0 - 0.05 * rank,
+                        score=score,
                         source=RetrievalSource.SYMBOL,
                         rationale=f"exact definition of `{token}`",
                     )
@@ -129,7 +181,7 @@ class HybridRetriever(Retriever):
                     results.append(
                         self._result(
                             n_chunk,
-                            score=(1.0 - 0.05 * rank) * self._config.expansion_discount,
+                            score=score * self._config.expansion_discount,
                             source=RetrievalSource.EXPANSION,
                             rationale=f"{why} `{token}`",
                         )
@@ -234,7 +286,7 @@ class HybridRetriever(Retriever):
                 blended = rrf_fuse(
                     [ce_ranked, vector],
                     k=cfg.rrf_k,
-                    weights=[1.0, cfg.rerank_blend_vector_weight],
+                    weights=[1.0, self._blend_vector_weight],
                 )
                 in_pool = set(pool)
                 scores = {cid: s for cid, s in blended if cid in in_pool}

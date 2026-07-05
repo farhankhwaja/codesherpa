@@ -65,6 +65,27 @@ def extract_identifier_tokens(query: str) -> list[str]:
     return out
 
 
+_PATH_SEGMENT_RE = re.compile(
+    r"[A-Za-z0-9_.\-]+(?:/[A-Za-z0-9_.\-]+)+"   # anything with a slash
+    r"|[A-Za-z0-9_\-]+\.(?:go|py|ts|tsx|js|jsx|mjs|cjs|proto)\b"  # bare filename
+)
+
+
+def extract_path_segments(query: str) -> list[str]:
+    """Path-like fragments of a query (stack traces always carry them:
+    ``pkg/billing/ledgersvc/service``, ``batch_run.go:214``). Used by the
+    router to prefer definitions whose file matches the query's own path
+    context — the fix for common-name hijack on large repos, where Go
+    convention names (`Service`, `Client`, `Opts`) are defined dozens of
+    times across packages (D45)."""
+    segments: list[str] = []
+    for raw in _PATH_SEGMENT_RE.findall(query):
+        cleaned = raw.strip("/").rstrip(".").split(":")[0]
+        if len(cleaned) >= 4 and cleaned not in segments:
+            segments.append(cleaned)
+    return segments
+
+
 def split_identifier(token: str) -> list[str]:
     """Split an identifier into lowercase words (camelCase/snake_case aware).
 
