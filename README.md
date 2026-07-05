@@ -15,12 +15,13 @@ instead of grep-and-read-the-whole-file.
 - Package & imports: **`codesherpa`** ([PyPI name reserved](https://github.com/farhankhwaja/codesherpa); until the first PyPI release, install from GitHub)
 - Command line & MCP server: **`sherpa`** · index lives in `.sherpa/`
 
-## Quickstart (3 commands)
+## Quickstart
 
 ```bash
 pip install git+https://github.com/farhankhwaja/codesherpa   # pip install codesherpa once on PyPI
 sherpa init                       # in your repo: hooks + first index + embeddings
 claude mcp add sherpa -- python -m codesherpa.mcp_server "$PWD"
+sherpa gain                       # after your first queries: what sherpa served & saved
 ```
 
 That's it. `init` installs `post-commit`/`post-checkout`/`post-merge`/
@@ -133,6 +134,41 @@ app; v1 was −70 %/+2 % before compact-first) — headless agents re-read the
 growing context every turn, so cache reads dominate raw counts. Full
 methodology and per-task data: `verification/ab/ab-results.md` (v1) and
 `ab-results-v2.md` (v2).
+
+## Measuring what sherpa saves
+
+`sherpa gain` reports local usage analytics with a two-class measurement
+design, because these are different kinds of numbers and mixing them is how
+tools end up lying:
+
+1. **Facts** — counted directly from recorded MCP tool calls: query counts
+   per tool, router/dense/graph path split, latency (avg/p95), tokens
+   actually served vs the budgets offered, expand rate.
+2. **A counterfactual estimate** — "context avoided". A retrieval layer
+   cannot directly measure "tokens saved": total token usage belongs to the
+   *calling agent's* loop, where re-reading the growing conversation every
+   turn dominates raw counts (that is exactly what our own A/B benchmark
+   measured — see the honest miss above). What sherpa *can* state is the
+   cheapest counterfactual: the exact formula is
+
+   ```
+   context_avoided ≈ Σ full_file_tokens(distinct files the served chunks came from)
+                     − Σ tokens_actually_served
+   ```
+
+   i.e. what an agent without sherpa would have read (whole files) minus
+   what sherpa returned (function-level chunks). File token sizes use the
+   same ~4-chars/token estimate as budget accounting (blob size ÷ 4; no
+   tokenizer dependency). Every rendering of this number — terminal and
+   HTML — carries the word **estimated** next to it, by test-enforced rule.
+
+Analytics are **local-only**: rows live in your repo's own
+`.sherpa/index.db`, nothing is transmitted anywhere, and the recorded
+values are privacy-preserving by construction — the sha256 of each query
+(never the text), counts, and token sums; never code, never file paths.
+Disable entirely with `analytics=False` in `RetrievalConfig`.
+`sherpa gain --html` writes a self-contained single-file report
+(no network requests) you can screenshot or share.
 
 ## Honest limitations
 

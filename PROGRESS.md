@@ -13,6 +13,9 @@ user-facing command/MCP/index `sherpa` (D37). CLAUDE.md still says
 "repograph" — same project.
 
 ## Done (one line each, with commit hash)
+- feature/gain: `sherpa gain` local usage analytics (usage table, dispatch
+  wrapper, privacy invariants test-pinned, terminal + self-contained HTML,
+  README methodology) — D46, this branch
 - Phase 5 merged (verifier PASS 284/284; A/B v1 target miss filed B3) — 3d44a72
 - Rename repograph→sherpa/codesherpa (D37; clean-checkout green) — 47e8d26
 - README (real EVAL_LOG numbers + honest limitations), LICENSE (MIT at ship; relicensed Apache-2.0 + NOTICE + DCO policy, sole-author relicense verified — 50/50 commits Farhan),

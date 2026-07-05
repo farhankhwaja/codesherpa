@@ -773,3 +773,36 @@ HELD-OUT set mined from different commits before the config is final; if
 the held-out set disagrees, that disagreement is the finding and the more
 conservative config wins. Status: re-validation on grafana/grafana pending
 (tuning + held-out sets to be mined from its real bug-fix history).
+
+## D46 — `sherpa gain`: local usage analytics with an honest-measurement design (feature/gain)
+Launch-blocking feature (human spec). One `usage` table in the index DB
+(observational — EXCLUDED from golden projections: a rebuilt index has no
+memory of who queried it; pinned by test_gain.py) populated by a SINGLE
+wrapper at the MCP dispatch point (server.py `_tool`), never per-tool code.
+Recording is best-effort by contract: any failure logs a warning and the
+query succeeds anyway (test-pinned via a raising monkeypatch).
+Privacy invariants, test-pinned by inspecting EVERY column of populated
+rows: no raw query text (sha256 only), no code, no file PATHS — paths of a
+proprietary repo are sensitive, so only a distinct-path count and their
+summed full-file token estimate are stored. `analytics: bool = True` on
+RetrievalConfig (local-only; False disables at dispatch).
+Measurement honesty: facts (queries, latency, tokens served, expand rate)
+are reported as counts; "context avoided" is a labeled COUNTERFACTUAL
+ESTIMATE — Σ full-file tokens of the distinct files served chunks came
+from (blobs.size_bytes/4, same len/4 heuristic as estimate_tokens; no
+tokenizer dependency) minus Σ tokens served. The word "estimated" must
+appear adjacent to that number in every rendering (terminal + HTML card +
+HTML methodology note) — asserted by tests. Rationale for not claiming
+"tokens saved": the A/B benchmark (EVAL_LOG Phase 6) showed agent-loop
+cache reads dominate raw token counts; a retrieval layer can only state
+the counterfactual, so it says so.
+`path_taken` attribution: search_code reads HybridRetriever.last_search_path
+("router"|"dense", set observationally in search()); graph tools are
+"graph"; expand/index_status/recent_changes are NULL (n/a). expand rows set
+expanded=1; tying an expand back to its originating search was rejected as
+not-cheap (needs a server-side expand_id→query map; revisit if the expand
+rate number proves insufficient).
+`sherpa gain --html` is a self-contained single file: inline CSS + static
+hand-rolled SVG (bar chart + stroke-dasharray donut), zero JS, zero network
+requests (test: no http(s) outside comments) — screenshots cleanly, dark
+theme.
