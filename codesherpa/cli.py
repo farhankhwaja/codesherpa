@@ -54,6 +54,20 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("bench", help="Run indexing/retrieval benchmarks.")
 
+    p_gain = sub.add_parser(
+        "gain",
+        help="Local usage analytics: what sherpa served, and an honest "
+        "estimate of the context it avoided.",
+    )
+    p_gain.add_argument("--since", help="Only count usage since this ISO date (YYYY-MM-DD).")
+    p_gain.add_argument("--days", type=int, help="Only count the last N days.")
+    p_gain.add_argument(
+        "--html",
+        action="store_true",
+        help="Write a self-contained HTML report (default .sherpa/gain.html) and print its path.",
+    )
+    p_gain.add_argument("--out", help="Output path for --html (default: .sherpa/gain.html).")
+
     return parser
 
 
@@ -249,6 +263,40 @@ def _cmd_status(_args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_gain(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from codesherpa import gain
+    from codesherpa.gitlayer.repo import NotARepositoryError, open_repo, repo_root
+    from codesherpa.gitlayer.sync import default_db_path
+    from codesherpa.store.sqlite_store import SQLiteIndexStore
+
+    try:
+        root = repo_root(open_repo("."))
+    except NotARepositoryError as exc:
+        print(f"sherpa gain: {exc}", file=sys.stderr)
+        return 1
+    db = default_db_path(root)
+    if not db.exists():
+        print("sherpa gain: no index found — run `sherpa init` first.", file=sys.stderr)
+        return 1
+
+    since, label = gain.since_expression(args.since, args.days)
+    store = SQLiteIndexStore(db)
+    try:
+        report = gain.usage_report(store.conn, since, label)
+        if args.html:
+            out = Path(args.out) if args.out else db.parent / "gain.html"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(gain.render_html(report), encoding="utf-8")
+            print(str(out))
+        else:
+            print(gain.render_terminal(report))
+    finally:
+        store.close()
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -269,6 +317,9 @@ def main(argv: list[str] | None = None) -> int:
         from codesherpa.mcp_server.__main__ import main as serve_main
 
         return serve_main([args.path])
+
+    if args.command == "gain":
+        return _cmd_gain(args)
 
     phase = _PHASE_OF[args.command]
     print(

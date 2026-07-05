@@ -102,3 +102,25 @@ CREATE TABLE IF NOT EXISTS embeddings (
 -- store on the first put_embedding, because vec0 tables need the embedding
 -- dimension fixed at creation time and the model (hence dim) is chosen in
 -- Phase 3. See SQLiteIndexStore._ensure_vec_table.
+
+-- Local-only usage analytics for `sherpa gain`. OBSERVATIONAL, not index
+-- state: excluded from golden projections (a rebuilt index legitimately has
+-- no memory of who queried it) and from sync entirely. PRIVACY: never store
+-- query text (sha256 hash only), never code, never file paths — only a
+-- distinct-path count and their summed full-file token estimate.
+CREATE TABLE IF NOT EXISTS usage (
+    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts                   TEXT NOT NULL,     -- UTC ISO-8601
+    tool                 TEXT NOT NULL,     -- MCP tool name
+    query_hash           TEXT NOT NULL,     -- sha256 hex of the query arg
+    path_taken           TEXT,              -- router | dense | graph | NULL
+    tokens_returned      INTEGER NOT NULL,
+    budget_tokens        INTEGER,
+    latency_ms           REAL NOT NULL,
+    results_count        INTEGER NOT NULL,
+    files_count          INTEGER NOT NULL DEFAULT 0,
+    files_spanned_tokens INTEGER NOT NULL DEFAULT 0,  -- size_bytes/4 estimate
+    expanded             INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_usage_ts ON usage(ts);

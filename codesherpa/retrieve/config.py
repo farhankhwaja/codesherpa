@@ -20,6 +20,13 @@ class RetrievalConfig:
     4000-token default budget.
     """
 
+    analytics: bool = True
+    """Record local usage analytics (`sherpa gain`) for every MCP tool call.
+    LOCAL-ONLY — rows live in the repo's own .sherpa/index.db and are never
+    transmitted anywhere. Stored per call: tool name, sha256 of the query
+    (never the text), path taken, token/latency/result counts. False
+    disables recording entirely; honored at the MCP dispatch wrapper."""
+
     # candidate list sizes
     bm25_top: int = 100
     vector_top: int = 100

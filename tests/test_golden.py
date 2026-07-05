@@ -321,6 +321,11 @@ GOLDEN_PROJECTION: dict[str, callable] = {
     # Phase 3 (retrieval worktree, ownership exception): embeddings of active
     # blobs' chunks. Exercised non-vacuously by tests/test_golden_embeddings.py.
     "embeddings_of_active_blobs": _project_embeddings,
+    # The `usage` table (feature/gain) is DELIBERATELY excluded: it is
+    # observational analytics, not index state — a from-scratch rebuild
+    # legitimately has no memory of who queried the old index, so golden
+    # equality must not compare it. Pinned by
+    # tests/test_gain.py::test_usage_rows_do_not_perturb_golden_projections.
 }
 
 

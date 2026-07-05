@@ -77,6 +77,10 @@ class HybridRetriever(Retriever):
                 max_chars=self._config.rerank_max_chars,
                 cache_dir=self._config.model_cache_dir,
             )
+        self.last_search_path: Optional[str] = None
+        """'router' or 'dense' — which path answered the most recent
+        ``search()`` call. Observational only (read by the usage-analytics
+        wrapper in mcp_server); never feeds back into retrieval."""
 
     # --------------------------------------------------------------- helpers
 
@@ -217,7 +221,9 @@ class HybridRetriever(Retriever):
     def search(self, query: str, budget_tokens: int = 4000) -> PackedContext:
         router_hits = self._router_results(query)
         if router_hits:
+            self.last_search_path = "router"
             return pack_results(query, router_hits, budget_tokens)
+        self.last_search_path = "dense"
         return pack_results(query, self._dense_candidates(query), budget_tokens)
 
     def _dense_candidates(self, query: str) -> list[SearchResult]:
