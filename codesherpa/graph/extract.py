@@ -38,6 +38,7 @@ _FAMILY = {
     "tsx": "ecma",
     "javascript": "ecma",
     "go": "go",
+    "proto": "proto",
 }
 
 # Method names of ubiquitous builtin types (dict, list, str, os.environ,

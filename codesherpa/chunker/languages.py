@@ -98,6 +98,11 @@ LANGUAGES: dict[str, LanguageSpec] = {
             }
         ),
     ),
+    "proto": LanguageSpec(
+        grammar="proto",
+        scope_types=frozenset({"message", "service", "enum"}),
+        definition_types=frozenset({"message", "service", "enum", "rpc"}),
+    ),
     "go": LanguageSpec(
         grammar="go",
         scope_types=frozenset(

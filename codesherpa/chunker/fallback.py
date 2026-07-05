@@ -30,6 +30,7 @@ _COMMENT_MARKER = {
     "typescript": "//",
     "tsx": "//",
     "go": "//",
+    "proto": "//",
 }
 
 

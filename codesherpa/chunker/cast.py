@@ -106,6 +106,11 @@ def _node_name(node: Node) -> str:
     name = node.child_by_field_name("name")
     if name is not None and name.text is not None:
         return name.text.decode("utf-8", errors="replace")
+    # grammars without name FIELDS (proto: message_name/service_name/enum_name
+    # children) — take the first *_name child's text
+    for child in node.children:
+        if child.type.endswith("_name") and child.text is not None:
+            return child.text.decode("utf-8", errors="replace")
     return node.type
 
 
