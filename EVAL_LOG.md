@@ -296,3 +296,11 @@ only). Fixture v3 (append-only commit 8: goexport/gorunner Go package).
 - hybrid recall by type: nl 1.00 · symbol 1.00 · stacktrace 1.00 ·
   decoy 1.00 · nl_hard 0.89 (q28 remains the sole documented miss).
 - Full suite: 305 passed, 0 failed, 0 skipped.
+
+Correction (2026-07-05, verifier finding 4 — appended, never edited): the
+Phase A entry above says "305 passed"; the correct clean-checkout collection
+at the verified tip is **323 tests** (294 on main + Phase A additions; the
+gate metrics in that entry were reproduced exactly and are unaffected).
+GOLDEN_DEEP=1 soak on fixture v3: PASS (also re-run independently by the
+verifier). Post-verification delta: generic-receiver methods now extracted
+(verifier finding 1 fixed on-branch with a pinned test), suite 324.

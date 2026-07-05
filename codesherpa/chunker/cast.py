@@ -93,7 +93,8 @@ def _receiver_type(method_node: Node) -> Optional[str]:
         type_node = param.child_by_field_name("type")
         if type_node is None or type_node.text is None:
             continue
-        return type_node.text.decode("utf-8", errors="replace").lstrip("*").strip()
+        text = type_node.text.decode("utf-8", errors="replace").lstrip("*").strip()
+        return text.split("[", 1)[0].strip()  # Pair[K, V] -> Pair
     return None
 
 

@@ -13,7 +13,9 @@
   receiver: (parameter_list
     (parameter_declaration
       type: [(type_identifier) @method.receiver
-             (pointer_type (type_identifier) @method.receiver)]))
+             (pointer_type (type_identifier) @method.receiver)
+             (generic_type type: (type_identifier) @method.receiver)
+             (pointer_type (generic_type type: (type_identifier) @method.receiver))]))
   name: (field_identifier) @name) @def.method
 
 ; structs, interfaces, and type aliases all register as type definitions

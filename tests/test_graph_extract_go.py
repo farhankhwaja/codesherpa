@@ -164,3 +164,29 @@ func F() { fmt.Println("hi") }
     # fmt.Println must not resolve to anything in-project either
     calls = _edge_pairs(symbols, edges, EdgeKind.CALLS)
     assert not any(dst == "Println" for _, dst, *_ in calls)
+
+
+def test_generic_receiver_methods_are_extracted():
+    """Phase A verifier finding 1: a method on a parameterized type
+    (`func (p *Pair[K, V]) Key() K`) must register as a METHOD keyed to the
+    bare receiver type, resolvable via locally evident bindings."""
+    src = b"""package generic
+
+type Pair[K comparable, V any] struct {
+\tk K
+\tv V
+}
+
+func (p *Pair[K, V]) Key() K {
+\treturn p.k
+}
+
+func UsePair(p *Pair[string, int]) string {
+\treturn p.Key()
+}
+"""
+    symbols, edges = _project(("generic/pair.go", src))
+    kinds = {s.symbol: s.kind for s in symbols if s.kind is not SymbolKind.MODULE}
+    assert kinds.get("Key") is SymbolKind.METHOD, kinds
+    calls = _edge_pairs(symbols, edges, EdgeKind.CALLS)
+    assert any(src_ == "UsePair" and dst == "Key" for src_, dst, *_ in calls), calls
