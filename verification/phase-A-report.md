@@ -63,3 +63,7 @@ All findings are non-blocking (none violates §2, a phase gate, or a stated Phas
 4. **EVAL_LOG.md Phase A entry overstates nothing but miscounts the suite**: it says "Full suite: 305 passed, 0 failed, 0 skipped", while actual collection is 294 on main, 321 at b6c33a7, 323 at the verified tip — 305 matches no measurable state. The gate-relevant numbers in the same entry (0.974/0.869 etc.) reproduced exactly in my clean run. Recommend correcting the count in a follow-up commit (EVAL_LOG is append-only: append a correction, don't edit).
 
 Verdict: **PASS** — every Phase A criterion reproduced from a clean checkout; a fresh session could merge this via PR without hesitation, ideally addressing Findings 2 and 4 in the PR before it lands.
+
+---
+
+**Delta addendum (2026-07-05):** commit 8061bfa was re-verified read-only by the Phase A verifier — scope confirmed limited to the finding-1 fix (go.scm generic-receiver alternations + cast.py type-param trim, pinned by `test_generic_receiver_methods_are_extracted`), the PROGRESS.md update, and an appended-only EVAL_LOG correction (0 deletions); `tests/test_graph_extract_go.py` + `tests/test_chunker_go.py` pass from a clean clone at 8061bfa (15 passed, exit 0) and the original generics attack input now yields the `Key` method — verdict upgraded to PASS-with-delta, finding 3 remains as recorded.
