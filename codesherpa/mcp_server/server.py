@@ -8,12 +8,16 @@ returned by every other tool.
 
 from __future__ import annotations
 
+import functools
 import json
+import logging
+import time
 from pathlib import Path
 from typing import Optional, Union
 
 from mcp.server.fastmcp import FastMCP
 
+from codesherpa import gain
 from codesherpa.contracts.index_contract import IndexStore
 from codesherpa.contracts.retrieval_contract import Retriever
 from codesherpa.contracts.types import SearchResult
@@ -22,6 +26,8 @@ from codesherpa.graph.recent import recent_changes as _recent_changes
 from codesherpa.graph.textutil import estimate_tokens
 
 __all__ = ["create_server"]
+
+logger = logging.getLogger(__name__)
 
 _MAX_SNIPPET_CHARS = 700  # graph tools show a taste; expand() shows all
 
@@ -85,7 +91,39 @@ def create_server(
         ),
     )
 
-    @mcp.tool()
+    # Usage analytics (`sherpa gain`): ONE wrapper at the dispatch point —
+    # never per-tool code. Local-only, honors config.analytics, and logging
+    # can NEVER fail a query: any recording error is swallowed to a warning.
+    analytics_on = store is not None and bool(
+        getattr(getattr(retriever, "_config", None), "analytics", True)
+    )
+
+    def _tool(fn):
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            start = time.perf_counter()
+            text = fn(*args, **kwargs)
+            if analytics_on:
+                try:
+                    gain.record_call(
+                        store,
+                        retriever,
+                        fn.__name__,
+                        kwargs,
+                        text,
+                        (time.perf_counter() - start) * 1000.0,
+                    )
+                except Exception:
+                    logger.warning(
+                        "sherpa gain: usage recording failed for %s (query unaffected)",
+                        fn.__name__,
+                        exc_info=True,
+                    )
+            return text
+
+        return mcp.tool()(wrapper)
+
+    @_tool
     def search_code(
         query: str, budget_tokens: int = 1500, include_code: bool = False
     ) -> str:
@@ -125,7 +163,7 @@ def create_server(
                 return text
             results.pop()
 
-    @mcp.tool()
+    @_tool
     def get_definition(symbol: str) -> str:
         """Jump straight to where a symbol (function/class/method/const) is
         defined. Faster and more precise than grep for a name you already
@@ -133,7 +171,7 @@ def create_server(
         results = retriever.get_definition(symbol)
         return _compact({"symbol": symbol, "results": [_result_row(r, with_code=True) for r in results]})
 
-    @mcp.tool()
+    @_tool
     def get_callers(symbol: str, limit: int = 10) -> str:
         """Who calls this function/method? Ranked by same-package proximity,
         inbound reference count, and recency — not an unordered dump. Use
@@ -142,7 +180,7 @@ def create_server(
         results = retriever.get_callers(symbol, limit=limit)
         return _compact({"symbol": symbol, "results": [_result_row(r) for r in results]})
 
-    @mcp.tool()
+    @_tool
     def get_references(symbol: str, limit: int = 20) -> str:
         """Everywhere a symbol is referenced, called, or imported, ranked.
         Broader than get_callers — includes type annotations, imports, and
@@ -150,7 +188,7 @@ def create_server(
         results = retriever.get_references(symbol, limit=limit)
         return _compact({"symbol": symbol, "results": [_result_row(r) for r in results]})
 
-    @mcp.tool()
+    @_tool
     def get_recent_changes(since: str) -> str:
         """What changed since a git ref (HEAD~5, a branch, a SHA) or ISO date
         (2024-06-01)? Returns commits with files AND symbol-level diffs
@@ -159,7 +197,7 @@ def create_server(
         commits = _recent_changes(repo, since)
         return _compact({"since": since, "commits": [c.to_dict() for c in commits]})
 
-    @mcp.tool()
+    @_tool
     def expand(expand_id: str) -> str:
         """Fetch the full chunk behind an expand_id returned by any other
         tool. Use when a compact result was relevant and you need the whole
@@ -178,7 +216,7 @@ def create_server(
             }
         )
 
-    @mcp.tool()
+    @_tool
     def index_status() -> str:
         """Index freshness and size: HEAD, last synced ref, active blob count.
         Check this if results look stale, then run `sherpa sync`."""

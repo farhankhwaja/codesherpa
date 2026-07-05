@@ -6,21 +6,22 @@ context it needs over MCP — function-level chunks under a token budget
 instead of grep-and-read-the-whole-file.
 
 [![CI](https://github.com/farhankhwaja/codesherpa/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/farhankhwaja/codesherpa/actions/workflows/ci.yml)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 <!-- TODO after PyPI publish: [![PyPI](https://img.shields.io/pypi/v/codesherpa)](https://pypi.org/project/codesherpa/) -->
 
 **Benchmarks with receipts:** see [EVAL_LOG.md](EVAL_LOG.md) — including the target we missed.
 
-- Package & imports: **`codesherpa`** ([PyPI name reserved](https://github.com/farhankhwaja/codesherpa); until the first PyPI release, install from GitHub)
+- Package & imports: **`codesherpa`** (PyPI release imminent — until then, install from GitHub)
 - Command line & MCP server: **`sherpa`** · index lives in `.sherpa/`
 
-## Quickstart (3 commands)
+## Quickstart
 
 ```bash
 pip install git+https://github.com/farhankhwaja/codesherpa   # pip install codesherpa once on PyPI
 sherpa init                       # in your repo: hooks + first index + embeddings
 claude mcp add sherpa -- python -m codesherpa.mcp_server "$PWD"
+sherpa gain                       # after your first queries: what sherpa served & saved
 ```
 
 That's it. `init` installs `post-commit`/`post-checkout`/`post-merge`/
@@ -97,14 +98,14 @@ All numbers from `EVAL_LOG.md` (append-only), measured on an Apple M-series
 CPU. Benchmarks were executed under this project's pre-rename name
 (*repograph*); the code is identical.
 
-**Retrieval quality** — 35-query gold set (incl. vocabulary-mismatch and
-decoy queries) over a mixed Py+TS fixture; file-level hits:
+**Retrieval quality** — 39-query gold set (incl. Go, vocabulary-mismatch,
+and decoy queries) over a mixed Py+TS+Go fixture; file-level hits:
 
 | method | recall@5 | MRR | p95 warm |
 |---|---|---|---|
-| **hybrid + rerank (sherpa)** | **0.971** | **0.877** | 178 ms |
-| BM25 only | 0.771 | 0.630 | 0.3 ms |
-| vector only | 0.829 | 0.738 | 25 ms |
+| **hybrid + rerank (sherpa)** | **0.974** | **0.869** | 211 ms |
+| BM25 only | 0.744 | 0.611 | 0.3 ms |
+| vector only | 0.795 | 0.714 | 30 ms |
 
 **External repos** — hand-built gold sets, full pipeline:
 
@@ -129,10 +130,46 @@ whole-file reads across both rounds (55–61 % in v2)**, 12–48 % fewer tool
 calls (37–48 % in v2), and on the real app **52.7 % lower billed cost**
 (v2). Honest miss: raw *token* usage per solved task
 still did not drop ≥50 % (v2: −16 % on the small fixture, +1 % on the real
-app; v1 was −70 %/+2 % before compact-first) — headless agents re-read the
+app; v1 was −70 %/+2 % before compact-first; negative = fewer tokens than
+the no-sherpa baseline) — headless agents re-read the
 growing context every turn, so cache reads dominate raw counts. Full
 methodology and per-task data: `verification/ab/ab-results.md` (v1) and
 `ab-results-v2.md` (v2).
+
+## Measuring what sherpa saves
+
+`sherpa gain` reports local usage analytics with a two-class measurement
+design, because these are different kinds of numbers and mixing them is how
+tools end up lying:
+
+1. **Facts** — counted directly from recorded MCP tool calls: query counts
+   per tool, router/dense/graph path split, latency (avg/p95), tokens
+   actually served vs the budgets offered, expand rate.
+2. **A counterfactual estimate** — "context avoided". A retrieval layer
+   cannot directly measure "tokens saved": total token usage belongs to the
+   *calling agent's* loop, where re-reading the growing conversation every
+   turn dominates raw counts (that is exactly what our own A/B benchmark
+   measured — see the honest miss above). What sherpa *can* state is the
+   cheapest counterfactual: the exact formula is
+
+   ```
+   context_avoided ≈ Σ full_file_tokens(distinct files the served chunks came from)
+                     − Σ tokens_actually_served
+   ```
+
+   i.e. what an agent without sherpa would have read (whole files) minus
+   what sherpa returned (function-level chunks). File token sizes use the
+   same ~4-chars/token estimate as budget accounting (blob size ÷ 4; no
+   tokenizer dependency). Every rendering of this number — terminal and
+   HTML — carries the word **estimated** next to it, by test-enforced rule.
+
+Analytics are **local-only**: rows live in your repo's own
+`.sherpa/index.db`, nothing is transmitted anywhere, and the recorded
+values are privacy-preserving by construction — the sha256 of each query
+(never the text), counts, and token sums; never code, never file paths.
+Disable entirely with `analytics=False` in `RetrievalConfig`.
+`sherpa gain --html` writes a self-contained single-file report
+(no network requests) you can screenshot or share.
 
 ## Honest limitations
 
@@ -169,7 +206,7 @@ what sherpa retrieves.
 
 ```bash
 git clone https://github.com/farhankhwaja/codesherpa && cd codesherpa
-python -m venv .venv && . .venv/bin/activate   # Python ≥ 3.11
+python -m venv .venv && . .venv/bin/activate   # Python ≥ 3.12 (the tested version)
 pip install -e ".[dev]"
 python -m pytest -q          # full suite incl. golden + eval gates (~8 min, models download once)
 ```
