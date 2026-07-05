@@ -1,16 +1,16 @@
 # Progress
 
 ## Current phase & worktree
-Merging to main: Phase A (Go support, verifier PASS at 043ece3) +
-`fix/go-symbol-repetition` (proto support D44; router anti-hijack,
-size-aware blend, package-qualified Go receiver breadcrumbs D45).
-Open: large-regime blend weight is TODO(upgrade) — revalidate on a public
-large repo with a tuning/held-out gold split (prior venue retracted).
-Prior state: ALL SHIPPED PHASES COMPLETE — Phase 6 merged to main with final whole-repo Verifier
-PASS (verification/phase-6-report.md; FAIL round on one README number
-preserved alongside). Project shipped as: PyPI dist + package `codesherpa`,
-user-facing command/MCP/index `sherpa` (D37). CLAUDE.md still says
-"repograph" — same project.
+SHIPPED. All phases complete and merged to main: Phases 0–6 (final
+whole-repo verifier PASS, verification/phase-6-report.md) + PR #1
+(Go support D43, proto D44, name-repetition fixes D45, verifier PASS
+verification/phase-A-fix-report.md; merged 2026-07-05, CI green).
+Project naming: PyPI dist + package `codesherpa`, user-facing
+command/MCP/index `sherpa` (D37); CLAUDE.md updated to match.
+Open (roadmap, not blocking): TODO(upgrade) — revalidate the large-regime
+blend weight + router ambiguity threshold on a public large repo
+(grafana/grafana protocol in D45: tuning + held-out gold split); PyPI
+publish; A/B raw-token target re-measure on a large repo.
 
 ## Done (one line each, with commit hash)
 - Phase 5 merged (verifier PASS 284/284; A/B v1 target miss filed B3) — 3d44a72
