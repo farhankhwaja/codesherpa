@@ -287,8 +287,12 @@ def _cmd_gain(args: argparse.Namespace) -> int:
         report = gain.usage_report(store.conn, since, label)
         if args.html:
             out = Path(args.out) if args.out else db.parent / "gain.html"
-            out.parent.mkdir(parents=True, exist_ok=True)
-            out.write_text(gain.render_html(report), encoding="utf-8")
+            try:
+                out.parent.mkdir(parents=True, exist_ok=True)
+                out.write_text(gain.render_html(report), encoding="utf-8")
+            except OSError as exc:
+                print(f"sherpa gain: cannot write {out}: {exc}", file=sys.stderr)
+                return 1
             print(str(out))
         else:
             print(gain.render_terminal(report))

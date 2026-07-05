@@ -352,3 +352,33 @@ def test_cli_gain_end_to_end(gain_env, tmp_path, monkeypatch, capsys):
     assert printed == str(html_out)
     assert html_out.is_file()
     assert "sherpa gain" in html_out.read_text()
+
+
+def test_cli_gain_html_unwritable_out_is_friendly(gain_env, tmp_path, monkeypatch, capsys):
+    """Verifier finding 1: unwritable --out must print a one-line error,
+    not a raw traceback."""
+    import os
+    import sqlite3
+
+    repo, store, _retriever, server = gain_env
+    _call_tools(server, [("search_code", {"query": SECRET_SYMBOL})])
+
+    sherpa_dir = Path(repo) / ".sherpa"
+    sherpa_dir.mkdir(exist_ok=True)
+    dest = sqlite3.connect(sherpa_dir / "index.db")
+    store.conn.backup(dest)
+    dest.close()
+    monkeypatch.chdir(repo)
+
+    locked = tmp_path / "locked"
+    locked.mkdir()
+    os.chmod(locked, 0o555)
+    try:
+        from codesherpa.cli import main
+
+        rc = main(["gain", "--html", "--out", str(locked / "gain.html")])
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "sherpa gain: cannot write" in err
+    finally:
+        os.chmod(locked, 0o755)

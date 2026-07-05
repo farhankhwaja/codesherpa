@@ -323,3 +323,13 @@ w=4 on the fixture (small regime), so D45b does not perturb the gate.
 Full suite green (clean checkout), GOLDEN_DEEP green. Large-regime blend
 weight ships as TODO(upgrade): revalidate on a public large repo with a
 tuning/held-out split (prior measurement venue retracted from records).
+
+## 2026-07-05 — feature/gain pre-merge gate (910e43d, clean checkout)
+`sherpa gain` local usage analytics (D46). No retrieval-path changes; gate
+re-run to prove no regression: hybrid 0.974 / 0.869 (p50 179 ms, p95 211 ms,
+sole miss q28), bm25 0.744/0.611, vector 0.795/0.714 — GATE: PASS,
+thresholds untouched. Full suite 350/350 + GOLDEN_DEEP green from a fresh
+py3.12 venv. Verifier PASS (verification/phase-gain-report.md) incl. the
+privacy attack: planted secrets (paths, symbols, string constants) queried
+through a real MCP session; zero hits across every usage row/column, the
+sqlite dump, and the HTML report; memory standing attack 3.80 GiB < 6 GB.
