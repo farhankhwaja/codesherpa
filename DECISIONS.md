@@ -707,7 +707,7 @@ holds). Official gate on the extended set: hybrid 0.974/0.869 vs bm25
 0.744 / vector 0.795, sole miss still q28 — GATE: PASS, thresholds
 untouched.
 
-## D44 — Protocol Buffers support (human instruction, Phase B; uncommitted per no-commit rule)
+## D44 — Protocol Buffers support (human instruction, Phase B)
 Large-repo validation surfaced .proto files, previously line-window-
 fallback only (gRPC monorepos interleave proto contracts with the Go/TS
 code that implements them). Added first-class proto support following the
@@ -724,7 +724,7 @@ proto symbols via the D19 graph recompute with no re-embedding; chunk
 shapes for pre-existing proto blobs remain line-window (content-addressed
 skip) and re-chunk naturally on first content change.
 
-## D45 — Go name-repetition fixes: router ranking, size-aware blend, package-qualified receivers (post-Phase-B; uncommitted per freeze)
+## D45 — Go name-repetition fixes: router ranking, size-aware blend, package-qualified receivers (post-Phase-B)
 User question: "improve Go CHUNKING because *Service repeats?" Diagnosis
 said no — chunk shapes were never the problem (path in every breadcrumb);
 the repetition (Go convention names like `Service`/`Client`/`Opts` defined

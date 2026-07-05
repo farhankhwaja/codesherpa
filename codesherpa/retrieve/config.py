@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import ClassVar
 
 from codesherpa.embed.engine import default_cache_dir
 
@@ -83,7 +84,7 @@ class RetrievalConfig:
     config field so future tuning is explicit, with a boundary test pinning
     the exactly-8 (specific) vs 9 (ambiguous) behavior."""
 
-    SMALL_INDEX_ACTIVE_BLOBS: int = 512
+    SMALL_INDEX_ACTIVE_BLOBS: ClassVar[int] = 512
     """Auto-blend size boundary, in active blobs (~chunks/4). Fixture=34,
     flask=224 (small regime, w=4); the motivating large monorepo sat ~5x
     above the boundary (large regime, w=1). Class attribute, not a
