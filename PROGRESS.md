@@ -1,7 +1,12 @@
 # Progress
 
 ## Current phase & worktree
-ALL PHASES COMPLETE — Phase 6 merged to main with final whole-repo Verifier
+Merging to main: Phase A (Go support, verifier PASS at 043ece3) +
+`fix/go-symbol-repetition` (proto support D44; router anti-hijack,
+size-aware blend, package-qualified Go receiver breadcrumbs D45).
+Open: large-regime blend weight is TODO(upgrade) — revalidate on a public
+large repo with a tuning/held-out gold split (prior venue retracted).
+Prior state: ALL SHIPPED PHASES COMPLETE — Phase 6 merged to main with final whole-repo Verifier
 PASS (verification/phase-6-report.md; FAIL round on one README number
 preserved alongside). Project shipped as: PyPI dist + package `codesherpa`,
 user-facing command/MCP/index `sherpa` (D37). CLAUDE.md still says
@@ -26,8 +31,13 @@ user-facing command/MCP/index `sherpa` (D37). CLAUDE.md still says
   recorded verbatim, B3 updated
 
 ## In progress
-Nothing. Post-ship candidates live in the README roadmap and TODO(upgrade)
-markers.
+Phase A close-out: PR to main with the §3.3 checklist (suite 323/323 from
+clean checkout, golden + GOLDEN_DEEP green, extended gate PASS 0.974/0.869,
+verifier PASS incl. 4.13 GB memory-attack), then Phase B.
+Go support summary: cAST chunking with (ReceiverType) breadcrumbs, go.scm
+symbol graph with evidence-authoritative receiver-typed call resolution
+(incl. generics), aliased package imports, router code-context morphology
+(D43); fixture v3 append-only Go package; gold set 39.
 
 ## Blocked / open questions
 None. B3 resolved by the human: SHIP with the measured v2 profile (D40);

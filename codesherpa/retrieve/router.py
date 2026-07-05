@@ -15,6 +15,25 @@ import re
 _TOKEN_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]{2,}")
 _CAMEL_RE = re.compile(r"[a-z][A-Z]|[A-Z][a-z0-9]*[A-Z]")
 
+# Code-context shapes: a token used like code IN THE QUERY ITSELF is an
+# identifier candidate regardless of casing morphology. Needed for Go, whose
+# exported single-word symbols (`Flush`, `Archive`) are PascalCase with one
+# capital and match no snake/camel rule — but in a stack trace they appear
+# as `goexport.(*Archive).Flush(0x...)`. Prose never call-parenthesizes or
+# dot-prefixes a word, so the D21 anti-hijack property is preserved.
+_CODE_CONTEXT_RES = (
+    re.compile(r"([A-Za-z_][A-Za-z0-9_]{2,})\s*\("),   # Flush(  — call-shaped
+    re.compile(r"[.:]([A-Za-z_][A-Za-z0-9_]{2,})"),      # .Flush  ::Flush
+    re.compile(r"\(\*?([A-Za-z_][A-Za-z0-9_]{2,})\)"),  # (*Archive) (Archive)
+)
+
+
+def _code_context_tokens(query: str) -> set[str]:
+    found: set[str] = set()
+    for pattern in _CODE_CONTEXT_RES:
+        found.update(pattern.findall(query))
+    return found
+
 
 def _looks_like_identifier(token: str) -> bool:
     """Identifier morphology: snake_case, camelCase/PascalCase, or digits."""
@@ -34,15 +53,37 @@ def extract_identifier_tokens(query: str) -> list[str]:
     """
     tokens = _TOKEN_RE.findall(query)
     stripped = query.strip()
+    in_code_context = _code_context_tokens(query)
     out: list[str] = []
     seen: set[str] = set()
     for tok in tokens:
         if tok in seen:
             continue
-        if _looks_like_identifier(tok) or tok == stripped:
+        if _looks_like_identifier(tok) or tok in in_code_context or tok == stripped:
             seen.add(tok)
             out.append(tok)
     return out
+
+
+_PATH_SEGMENT_RE = re.compile(
+    r"[A-Za-z0-9_.\-]+(?:/[A-Za-z0-9_.\-]+)+"   # anything with a slash
+    r"|[A-Za-z0-9_\-]+\.(?:go|py|ts|tsx|js|jsx|mjs|cjs|proto)\b"  # bare filename
+)
+
+
+def extract_path_segments(query: str) -> list[str]:
+    """Path-like fragments of a query (stack traces always carry them:
+    ``pkg/billing/ledgersvc/service``, ``batch_run.go:214``). Used by the
+    router to prefer definitions whose file matches the query's own path
+    context — the fix for common-name hijack on large repos, where Go
+    convention names (`Service`, `Client`, `Opts`) are defined dozens of
+    times across packages (D45)."""
+    segments: list[str] = []
+    for raw in _PATH_SEGMENT_RE.findall(query):
+        cleaned = raw.strip("/").rstrip(".").split(":")[0]
+        if len(cleaned) >= 4 and cleaned not in segments:
+            segments.append(cleaned)
+    return segments
 
 
 def split_identifier(token: str) -> list[str]:

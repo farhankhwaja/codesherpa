@@ -81,10 +81,36 @@ class _Piece:
     head: Optional[Node]  # first AST node in the piece, for signature/docstring
 
 
+def _receiver_type(method_node: Node) -> Optional[str]:
+    """Bare receiver type of a Go ``method_declaration`` (pointer stripped):
+    ``func (s *Store) Save(...)`` -> ``Store``."""
+    receiver = method_node.child_by_field_name("receiver")
+    if receiver is None:
+        return None
+    for param in receiver.children:
+        if param.type != "parameter_declaration":
+            continue
+        type_node = param.child_by_field_name("type")
+        if type_node is None or type_node.text is None:
+            continue
+        text = type_node.text.decode("utf-8", errors="replace").lstrip("*").strip()
+        return text.split("[", 1)[0].strip()  # Pair[K, V] -> Pair
+    return None
+
+
 def _node_name(node: Node) -> str:
+    if node.type == "method_declaration":  # Go: breadcrumb scope is the receiver
+        receiver = _receiver_type(node)
+        if receiver:
+            return f"({receiver})"
     name = node.child_by_field_name("name")
     if name is not None and name.text is not None:
         return name.text.decode("utf-8", errors="replace")
+    # grammars without name FIELDS (proto: message_name/service_name/enum_name
+    # children) — take the first *_name child's text
+    for child in node.children:
+        if child.type.endswith("_name") and child.text is not None:
+            return child.text.decode("utf-8", errors="replace")
     return node.type
 
 
@@ -214,7 +240,35 @@ def _breadcrumb(
     spec: LanguageSpec,
 ) -> str:
     marker = breadcrumb_marker(language)
-    scope = ".".join(piece.scope) if piece.scope else PurePosixPath(file_path).stem
+
+    def _qualify(label: str) -> str:
+        """Go receiver labels carry the package (D45): `(Store)` is the same
+        label in every package of a big monorepo — convention receivers
+        repeat dozens of times; `(goexport.Store)` disambiguates the
+        lexical/dense signal."""
+        if language != "go" or not (label.startswith("(") and label.endswith(")")):
+            return label
+        package = PurePosixPath(file_path).parent.name
+        inner = label[1:-1]
+        if not package or "." in inner:
+            return label
+        return f"({package}.{inner})"
+
+    scope = (
+        ".".join(_qualify(part) for part in piece.scope)
+        if piece.scope
+        else PurePosixPath(file_path).stem
+    )
+    if not piece.scope and piece.head is not None:
+        # Go methods are TOP-LEVEL declarations (unlike class methods, which
+        # inherit a scope by recursion), so a small method chunk would carry
+        # only the file stem — surface the receiver instead:
+        # `path :: (pkg.ReceiverType) :: func (s *ReceiverType) Name(...)`
+        head = _descend_to_definition(piece.head, spec)
+        if head.type == "method_declaration":
+            receiver = _receiver_type(head)
+            if receiver:
+                scope = _qualify(f"({receiver})")
     signature = next((ln.strip() for ln in code.splitlines() if ln.strip()), "")
     if len(signature) > 120:
         signature = signature[:117] + "..."

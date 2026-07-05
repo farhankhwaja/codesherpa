@@ -1,6 +1,6 @@
 """Chunker entry point: language detection + strategy dispatch.
 
-Python/TypeScript/JavaScript/TSX go through the cAST (tree-sitter
+Python/TypeScript/JavaScript/TSX/Go go through the cAST (tree-sitter
 split-then-merge) chunker; adding a language means adding one entry to
 ``chunker.languages.LANGUAGES``. Everything else — and any file that fails to
 parse — uses the line-window fallback: the indexer never crashes on a weird
@@ -26,6 +26,8 @@ LANGUAGE_BY_EXTENSION = {
     ".mjs": "javascript",
     ".cjs": "javascript",
     ".jsx": "javascript",
+    ".go": "go",
+    ".proto": "proto",
 }
 
 

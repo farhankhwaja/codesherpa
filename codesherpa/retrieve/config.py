@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import ClassVar
 
 from codesherpa.embed.engine import default_cache_dir
 
@@ -57,12 +58,37 @@ class RetrievalConfig:
     vocabulary-mismatch code queries where the embedder is strong; RRF over
     (CE rank, vector rank) keeps both signals. False = pure CE scores."""
 
-    rerank_blend_vector_weight: float = 4.0
-    """Vector-list weight in the CE blend (CE weight is 1). The dense channel
-    is the primary signal; the CE acts as a booster/tie-breaker that can lift
-    a chunk it ranks highly but cannot bury a vector-top chunk. Chosen by
-    grid on the hardened gold set (w=1..6: recall@5 0.914 -> 0.971 at w=4,
-    plateau after) — table in DECISIONS.md."""
+    rerank_blend_vector_weight: float | None = None
+    """Vector-list weight in the CE blend (CE weight is 1). None = size-aware
+    auto (D45): 4.0 on small indexes (<= SMALL_INDEX_ACTIVE_BLOBS active
+    blobs — the D27 fixture grid: recall 0.914 -> 0.971 at w=4) and 1.0 on
+    large ones, where the dense ranking degrades and over-weighting it
+    drags the fused ranking below plain BM25 (D45; both candidate embedders
+    ranked near-identically, so the collapse is corpus-driven, not the
+    model). TODO(upgrade): the large-regime weight was tuned on a single
+    private venue since retracted from records — revalidate on a public
+    large repo with a tuning + held-out gold split. Set a float to pin
+    either regime."""
+
+    router_token_fanout: int = 3
+    """Max definitions a single router query token may contribute (D45).
+    Unbounded fan-out let convention names flood the packed results."""
+
+    router_ambiguous_defs: int = 8
+    """Router tokens with MORE definitions than this are treated as
+    convention names (ranked below every specific token, never dropped).
+    Rationale for 8: tuned on ONE large Go+TS monorepo, where true
+    convention names measured in the dozens of definitions and genuinely
+    specific symbols measured 1-3; 8 leaves headroom for legitimately
+    reused domain names. Deliberately a
+    config field so future tuning is explicit, with a boundary test pinning
+    the exactly-8 (specific) vs 9 (ambiguous) behavior."""
+
+    SMALL_INDEX_ACTIVE_BLOBS: ClassVar[int] = 512
+    """Auto-blend size boundary, in active blobs (~chunks/4). Fixture=34,
+    flask=224 (small regime, w=4); the motivating large monorepo sat ~5x
+    above the boundary (large regime, w=1). Class attribute, not a
+    per-instance field."""
 
     # 1-hop graph expansion
     expansion_enabled: bool = True

@@ -32,7 +32,14 @@ _MAX_SIGNATURE_CHARS = 200
 
 # Language families: a name may only resolve across files within its family
 # (Python identifiers never resolve to TypeScript definitions, etc.).
-_FAMILY = {"python": "python", "typescript": "ecma", "tsx": "ecma", "javascript": "ecma"}
+_FAMILY = {
+    "python": "python",
+    "typescript": "ecma",
+    "tsx": "ecma",
+    "javascript": "ecma",
+    "go": "go",
+    "proto": "proto",
+}
 
 # Method names of ubiquitous builtin types (dict, list, str, os.environ,
 # Array, Promise, localStorage, console, ...). The *globally-unique* fallback
@@ -48,7 +55,11 @@ _GENERIC_NAMES = frozenset(
     find findIndex forEach trim replace toString json getItem setItem
     removeItem getTime floor ceil round max min stringify parse log info warn
     error then catch finally resolve reject setTimeout
+    String Error Len Close Write Read
     """.split()
+    # the last row is Go: ubiquitous fmt.Stringer/error/io method names that
+    # must not resolve via the globally-unique fallback (receiver-typed and
+    # same-file/import resolution still apply to them)
 )
 
 # Order matters when two query patterns capture the same node span.
@@ -89,6 +100,7 @@ class _Import:
 class _Site:
     name: str
     offset: int
+    recv: Optional[str] = None  # Go: selector operand (`x` in `x.Foo()`)
 
 
 @dataclass
@@ -100,6 +112,11 @@ class _FileFacts:
     imports: list[_Import] = field(default_factory=list)
     calls: list[_Site] = field(default_factory=list)
     refs: list[_Site] = field(default_factory=list)
+    local_types: dict[str, str] = field(default_factory=dict)
+    """Go: variable name -> locally-evident type (params, `x := T{...}`,
+    `var x T`). File-level best-effort, earliest binding wins."""
+    method_receiver: dict[int, str] = field(default_factory=dict)
+    """Go: method def byte_start -> bare receiver type (`Store`)."""
 
 
 @lru_cache(maxsize=None)
@@ -146,6 +163,9 @@ def _extract_file(source: SourceFile) -> _FileFacts:
     claimed_offsets: set[int] = set()  # def names, call names: not plain refs
     raw_refs: dict[int, str] = {}
 
+    raw_calls: dict[int, _Site] = {}  # name offset -> site; recv-bearing wins
+    raw_binds: list[tuple[int, str, str]] = []  # (offset, name, type)
+
     for _pattern, caps in QueryCursor(query).matches(tree.root_node):
         def_key = next((k for k in _DEF_CAPTURE_KINDS if k in caps), None)
         if def_key is not None:
@@ -157,6 +177,18 @@ def _extract_file(source: SourceFile) -> _FileFacts:
             if existing is None or _KIND_PRIORITY[kind] > _KIND_PRIORITY[existing[0]]:
                 raw_defs[span] = (kind, _text(name_node, source.data), name_node.start_byte)
             claimed_offsets.add(name_node.start_byte)
+            recv_nodes = caps.get("method.receiver")
+            if recv_nodes:  # Go: methods are keyed with their receiver type
+                facts.method_receiver[span[0]] = _text(recv_nodes[0], source.data)
+        elif "bind.name" in caps and "bind.type" in caps:
+            bind_name = caps["bind.name"][0]
+            raw_binds.append(
+                (
+                    bind_name.start_byte,
+                    _text(bind_name, source.data),
+                    _text(caps["bind.type"][0], source.data),
+                )
+            )
         elif "import" in caps:
             node = caps["import"][0]
             import_spans.append((node.start_byte, node.end_byte))
@@ -173,11 +205,25 @@ def _extract_file(source: SourceFile) -> _FileFacts:
                 )
         elif "call" in caps:
             name_node = caps["call.name"][0]
-            facts.calls.append(_Site(_text(name_node, source.data), name_node.start_byte))
+            recv_nodes = caps.get("call.recv")
+            site = _Site(
+                _text(name_node, source.data),
+                name_node.start_byte,
+                recv=_text(recv_nodes[0], source.data) if recv_nodes else None,
+            )
+            # selector calls match both the recv-bearing and the generic
+            # pattern: keep one site per offset, preferring the recv version
+            existing_site = raw_calls.get(site.offset)
+            if existing_site is None or (site.recv and not existing_site.recv):
+                raw_calls[site.offset] = site
             claimed_offsets.add(name_node.start_byte)
         elif "ref" in caps:
             node = caps["ref"][0]
             raw_refs.setdefault(node.start_byte, _text(node, source.data))
+
+    facts.calls.extend(raw_calls[o] for o in sorted(raw_calls))
+    for _offset, bind_name, bind_type in sorted(raw_binds):
+        facts.local_types.setdefault(bind_name, bind_type.lstrip("*"))
 
     # Materialize definitions; reclassify functions nested in a class as
     # methods, and SHOUTY top-level variables as consts.
@@ -241,13 +287,21 @@ class _Resolver:
         self.family_by_path: dict[str, str] = {
             f.source.path: _FAMILY[f.source.language] for f in all_facts
         }
+        self.by_receiver: dict[tuple[str, str, str], list[SymbolNode]] = {}
+        """(family, receiver_type, method_name) -> method defs (Go)."""
         for facts in all_facts:
             per_file = self.by_file.setdefault(facts.source.path, {})
             package = facts.source.path.rpartition("/")[0]
+            family = _FAMILY[facts.source.language]
             for node in facts.defs:
                 per_file.setdefault(node.symbol, []).append(node)
                 self.by_package.setdefault((package, node.symbol), []).append(node)
                 self.by_name.setdefault(node.symbol, []).append(node)
+                receiver = facts.method_receiver.get(node.byte_start)
+                if receiver:
+                    self.by_receiver.setdefault(
+                        (family, receiver.lstrip("*"), node.symbol), []
+                    ).append(node)
 
     @staticmethod
     def _best(candidates: list[SymbolNode]) -> SymbolNode:
@@ -255,6 +309,16 @@ class _Resolver:
             candidates,
             key=lambda n: (n.kind is SymbolKind.METHOD, n.file_path, n.byte_start),
         )
+
+    def resolve_method(
+        self, family: str, receiver_type: str, name: str
+    ) -> Optional[SymbolNode]:
+        """Receiver-typed method resolution (Go): `x.Foo()` where x's type is
+        locally evident resolves to the Foo defined on that type. NO
+        interface-satisfaction resolution — that needs type checking
+        (DECISIONS.md)."""
+        candidates = self.by_receiver.get((family, receiver_type, name))
+        return self._best(candidates) if candidates else None
 
     def target_def_in_file(self, path: str, name: str) -> Optional[SymbolNode]:
         candidates = self.by_file.get(path, {}).get(name)
@@ -386,7 +450,20 @@ def extract_project(files: Iterable[SourceFile]) -> tuple[list[SymbolNode], list
             edge_set.setdefault((edge.src, edge.dst, edge.kind), edge)
 
         for site in facts.calls:
-            target = resolver.resolve(site.name, facts, bindings)
+            recv_type = (
+                facts.local_types.get(site.recv) if site.recv is not None else None
+            )
+            if recv_type is not None:
+                # The receiver's type is locally evident: resolve against that
+                # type's methods ONLY. No match (interface value, external
+                # type) -> DROP — type evidence must never be overridden by
+                # name guessing (no interface-satisfaction resolution; see
+                # DECISIONS.md).
+                target = resolver.resolve_method(
+                    _FAMILY[facts.source.language], recv_type, site.name
+                )
+            else:
+                target = resolver.resolve(site.name, facts, bindings)
             if target is not None:
                 _add_edge(_enclosing(facts, site.offset), target, EdgeKind.CALLS)
         for site in facts.refs:

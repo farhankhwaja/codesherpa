@@ -130,12 +130,12 @@ def test_stdio_server_every_tool_end_to_end(synced_miniproject: tuple[Path, Path
                 )
                 assert 0 < len(payload["results"]) <= 5
 
-                # get_recent_changes
+                # get_recent_changes (fixture-v3: HEAD~3 spans go, js, auth)
                 payload = _payload(
-                    await session.call_tool("get_recent_changes", {"since": "HEAD~2"})
+                    await session.call_tool("get_recent_changes", {"since": "HEAD~3"})
                 )
-                assert len(payload["commits"]) == 2
-                auth = payload["commits"][1]
+                assert len(payload["commits"]) == 3
+                auth = payload["commits"][2]
                 changed = {
                     (s["path"], s["symbol"]): s["change"] for s in auth["changed_symbols"]
                 }

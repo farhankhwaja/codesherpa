@@ -275,3 +275,51 @@ verification/ab/ab-results-v2.md.
 - Guardrail B ≥ A holds (20/21 vs 19/21). Variance note: v1↔v2 flipped two
   task outcomes (sizly D2, D5) — single-run-per-task remains the harness's
   main limitation.
+
+## 2026-07-05 — Phase A (feature/go-support) — official gate on the extended gold set
+
+Gold set 35 -> 39 queries (4 Go: nl, symbol, nl_hard, stack-trace — additive
+only). Fixture v3 (append-only commit 8: goexport/gorunner Go package).
+`eval/run_eval.py --mode all`, thresholds untouched:
+
+| mode | recall@5 | MRR | p50 | p95 | misses |
+|---|---|---|---|---|---|
+| hybrid | **0.974** | **0.869** | 168 ms | 177 ms | q28 |
+| bm25-only | 0.744 | 0.611 | 0.3 ms | 0.3 ms | 10 queries |
+| vector-only | 0.795 | 0.714 | 18 ms | 26 ms | 8 queries |
+
+- recall@5 0.974 >= 0.80 ✓; MRR 0.869 >= 0.60 ✓; hybrid strictly beats both
+  single channels ✓ — **GATE: PASS**
+- All 4 Go queries hit, including the vocabulary-mismatch nl_hard (q38) and
+  the Go stack trace (q39 — via the router fast path after the code-context
+  morphology fix, D43d; router stacktrace p95 back under the 200 ms gate).
+- hybrid recall by type: nl 1.00 · symbol 1.00 · stacktrace 1.00 ·
+  decoy 1.00 · nl_hard 0.89 (q28 remains the sole documented miss).
+- Full suite: 305 passed, 0 failed, 0 skipped.
+
+Correction (2026-07-05, verifier finding 4 — appended, never edited): the
+Phase A entry above says "305 passed"; the correct clean-checkout collection
+at the verified tip is **323 tests** (294 on main + Phase A additions; the
+gate metrics in that entry were reproduced exactly and are unaffected).
+GOLDEN_DEEP=1 soak on fixture v3: PASS (also re-run independently by the
+verifier). Post-verification delta: generic-receiver methods now extracted
+(verifier finding 1 fixed on-branch with a pinned test), suite 324.
+
+## 2026-07-05 — fix/go-symbol-repetition pre-merge gate (b422865, clean checkout)
+Branch: feature/go-support + proto support (D44) + Go name-repetition fixes
+(D45: router anti-hijack, size-aware CE/vector blend, package-qualified Go
+receiver breadcrumbs, EMBED_TEXT_VERSION=2). Fresh py3.12 venv, fixture
+rebuilt from build_miniproject.py (v3, HEAD 6e1a7a1d0fee), 39-query gold set.
+
+| mode   | recall@5 | MRR   | p50 ms | p95 ms | misses |
+|--------|----------|-------|--------|--------|--------|
+| hybrid | 0.974    | 0.869 | 165.3  | 181.7  | q28    |
+| bm25   | 0.744    | 0.611 | 0.3    | 0.3    | 10 queries |
+| vector | 0.795    | 0.714 | 18.6   | 27.3   | 8 queries  |
+
+Hybrid recall by type: decoy=1.00 nl=1.00 nl_hard=0.89 stacktrace=1.00
+symbol=1.00. GATE: PASS — thresholds untouched; auto-blend resolves to
+w=4 on the fixture (small regime), so D45b does not perturb the gate.
+Full suite green (clean checkout), GOLDEN_DEEP green. Large-regime blend
+weight ships as TODO(upgrade): revalidate on a public large repo with a
+tuning/held-out split (prior measurement venue retracted from records).

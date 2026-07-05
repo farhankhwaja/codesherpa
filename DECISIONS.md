@@ -662,3 +662,114 @@ tests/test_licensing.py so the legal posture is now pinned by the suite.
 Historical records (CLAUDE.md §10's "LICENSE (MIT)" checklist line, past
 verifier reports, EVAL_LOG) intentionally keep the old wording; PROGRESS
 records "MIT at ship; relicensed Apache-2.0".
+
+## D43 — Go language support (Phase A, feature/go-support)
+Go joins Py/TS/JS/TSX following the "a language = a LanguageSpec + a query
+file" architecture, with four Go-specific choices:
+(a) **Receiver-scoped breadcrumbs.** Go methods are TOP-LEVEL declarations
+(not nested like class methods), so recursion never hands them a scope;
+cast.py surfaces the receiver instead: `path :: (Store) :: func (s *Store)
+Save(...)` (pointer stripped). The same rule feeds `_node_name` when an
+oversized method recurses.
+(b) **Receiver-typed call resolution, evidence-authoritative.** go.scm emits
+`@call.recv` (selector operand) and `@bind.name/@bind.type` (params — incl.
+method receivers — `var x T`, `x := T{...}`, `x := &T{...}`). When a call's
+receiver has a locally evident type, resolution consults ONLY that type's
+methods; no match (interface value, external type) -> the edge is DROPPED —
+type evidence is never overridden by name guessing. Pinned by a two-types-
+one-method-name disambiguation test and an interface-parameter negative
+test. Without evidence the ordinary §7.3 ladder applies, so a call through
+a struct FIELD typed as an interface may still resolve by package-unique
+name — documented best-effort, same as every other language; **interface-
+satisfaction resolution is explicitly out of scope** (requires type
+checking).
+(c) **Package imports resolve to a representative file.** Go imports name a
+package (module-qualified); the resolver suffix-matches progressively
+shorter tails of the import path against project directories and represents
+the package by its lexicographically first .go file (imports are
+module-to-module edges, so any stable representative works). Aliased
+imports bind the alias. Stdlib/external imports resolve to None.
+(d) **Router morphology gained code-context shapes.** Go exported symbols
+are single-capital PascalCase (`Flush`) — no snake/camel morphology — so the
+Go stack-trace gold query missed the router fast path (measured 216 ms vs
+the 200 ms gate). Tokens that appear call-shaped (`Flush(`), dot-prefixed
+(`.Flush`), or receiver-shaped (`(*Archive)`) IN THE QUERY are now
+identifier candidates regardless of casing; prose never uses those shapes,
+preserving the D21 anti-hijack property (asserted by a new sentence-case
+negative test).
+Also: `String/Error/Len/Close/Write/Read` join the generic-name stoplist
+(ubiquitous Go interface methods; receiver-typed and same-file/import
+resolution still apply). Fixture v3 adds goexport/gorunner as APPEND-ONLY
+commit 8 (earlier SHAs unchanged; FIXTURE_VERSION 2->3); history-anchored
+recent-changes/MCP tests shifted to the 8-commit history (v2 precedent,
+assertions equivalent). Gold set 35 -> 39 (additive; nl_hard ratchet
+holds). Official gate on the extended set: hybrid 0.974/0.869 vs bm25
+0.744 / vector 0.795, sole miss still q28 — GATE: PASS, thresholds
+untouched.
+
+## D44 — Protocol Buffers support (human instruction, Phase B)
+Large-repo validation surfaced .proto files, previously line-window-
+fallback only (gRPC monorepos interleave proto contracts with the Go/TS
+code that implements them). Added first-class proto support following the
+D43 recipe: chunker LanguageSpec (message/service/enum scopes — grammar has
+no name FIELDS, so cast.py gained a generic first-`*_name`-child fallback
+for scope naming) + graph/queries/proto.scm (messages/enums/services as
+CLASS, rpcs as METHOD, root-relative import resolution with unique-suffix
+fallback, message_or_enum_type references). proto is its own language
+family: references resolve proto->proto ONLY — no linking to generated
+Go/TS bindings (same never-guess principle as the D43 interface non-goal),
+pinned by a cross-family negative test (tests/test_proto_support.py).
+Retrofit note: on an already-built index, a warm `sherpa sync` picks up
+proto symbols via the D19 graph recompute with no re-embedding; chunk
+shapes for pre-existing proto blobs remain line-window (content-addressed
+skip) and re-chunk naturally on first content change.
+
+## D45 — Go name-repetition fixes: router ranking, size-aware blend, package-qualified receivers (post-Phase-B)
+User question: "improve Go CHUNKING because *Service repeats?" Diagnosis
+said no — chunk shapes were never the problem (path in every breadcrumb);
+the repetition (Go convention names like `Service`/`Client`/`Opts` defined
+dozens of times across packages in a large monorepo) bites in the ROUTER
+and the rerank BLEND. The measurements motivating these fixes were taken
+on a private large-repo venue that has since been retracted from all
+records; quantitative re-validation runs on a public venue
+(grafana/grafana) — pending below. Three fixes, per the approved plan:
+(a) **Router anti-hijack** (measured failure: a stack-trace query mixing a
+convention receiver with a rare function returned only convention-name
+definitions): tokens processed rarest-first; per-token definition fan-out
+capped at 3; definitions whose file path matches a path-like fragment of
+the query itself (stack traces carry package paths) rank first;
+convention-name tokens (>8 defs) floor below every specific token. The
+motivating trace went MISS -> rank 0, single-digit ms. Bare common-name
+lookups still answer (test-pinned).
+(b) **Size-aware CE/vector blend** (measured failure: hybrid ranked below
+bm25-only at ~10x fixture scale): `rerank_blend_vector_weight` defaults to
+None = auto — 4.0 up to 512 active blobs (D27 fixture grid holds), 1.0
+above (at scale the dense channel degraded and w=4 dragged hybrid below
+bm25; w<=1 restored hybrid >= bm25; explicit float pins). Control
+experiment: swapping nomic for MiniLM left the vector-only ranking
+essentially unchanged — the dense collapse was corpus-driven
+(near-duplicate sibling files), NOT the model; D33's nomic default stands.
+(c) **Package-qualified Go receiver breadcrumbs**: `(goexport.Store)`
+instead of `(Store)`; EMBED_TEXT_VERSION 1 -> 2, so D30b invalidation
+re-embeds indexes once on next sync (minutes to tens of minutes with index
+size).
+Fixture gate re-verified PASS in the full suite (auto-blend resolves to
+w=4 there); golden + GOLDEN_DEEP green.
+Plan-review adjustments applied:
+(1) fan-out/ambiguity thresholds are RetrievalConfig fields
+(`router_token_fanout`, `router_ambiguous_defs`) with the tuned-on-one-repo
+rationale inline; boundary test pins exactly-8 (specific) vs 9 (ambiguous);
+a trace-hijack regression also runs against the REAL fixture store (where
+it exposed that a small file is one chunk — the assertion tests chunk
+content, not rationale text).
+(2) the one-time re-embed announces itself before the pass
+("embed text format changed (v2): re-embedding N chunks, one time") and
+hook-triggered quiet syncs DEFER the invalidation entirely (old vectors
+stay serviceable; `invalidation_pending()` + `defer_invalidation=` in
+warm.embed_index, test-pinned) — a routine pull never silently absorbs a
+long re-embed.
+(3) blend-weight choice must be tuned on one query set and CONFIRMED on a
+HELD-OUT set mined from different commits before the config is final; if
+the held-out set disagrees, that disagreement is the finding and the more
+conservative config wins. Status: re-validation on grafana/grafana pending
+(tuning + held-out sets to be mined from its real bug-fix history).

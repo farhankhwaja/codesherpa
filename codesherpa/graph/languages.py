@@ -90,6 +90,61 @@ def _ts_resolve_import(
     return None
 
 
+# ------------------------------------------------------------------- go
+
+def _go_module_name(path: str) -> str:
+    """Per-file module symbol, like TS: path without extension."""
+    return path[: -len(".go")] if path.endswith(".go") else path
+
+
+def _go_resolve_import(
+    module_text: str, importer_path: str, project_paths: frozenset[str]
+) -> Optional[str]:
+    """Resolve a Go import path to a project package DIRECTORY, represented
+    by its lexicographically first .go file.
+
+    Go imports name a package by module-qualified path
+    (``example.com/mod/pkg/sub``); the in-repo directory is a SUFFIX of it.
+    Try progressively shorter tails until one matches a directory that
+    contains .go files. Standard-library and external imports match nothing
+    and resolve to None (out of scope, same as bare TS specifiers).
+    """
+    text = module_text.strip().strip('"`')
+    if not text:
+        return None
+    parts = [p for p in text.split("/") if p]
+    for i in range(len(parts)):
+        directory = "/".join(parts[i:])
+        files = sorted(
+            path
+            for path in project_paths
+            if path.endswith(".go") and posixpath.dirname(path) == directory
+        )
+        if files:
+            return files[0]
+    return None
+
+
+# ---------------------------------------------------------------- proto
+
+def _proto_module_name(path: str) -> str:
+    return path[: -len(".proto")] if path.endswith(".proto") else path
+
+
+def _proto_resolve_import(
+    module_text: str, importer_path: str, project_paths: frozenset[str]
+) -> Optional[str]:
+    """proto imports are root-relative ("common/proto/errors.proto"); exact
+    match first, then unique-suffix match for vendored include roots."""
+    text = module_text.strip().strip('"')
+    if not text:
+        return None
+    if text in project_paths:
+        return text
+    matches = sorted(p for p in project_paths if p.endswith("/" + text))
+    return matches[0] if len(matches) == 1 else None
+
+
 REGISTRY: dict[str, LanguageSpec] = {
     "python": LanguageSpec(
         name="python",
@@ -115,6 +170,18 @@ REGISTRY: dict[str, LanguageSpec] = {
         module_name=_ts_module_name,
         resolve_import=_ts_resolve_import,
     ),
+    "go": LanguageSpec(
+        name="go",
+        query_file="go.scm",
+        module_name=_go_module_name,
+        resolve_import=_go_resolve_import,
+    ),
+    "proto": LanguageSpec(
+        name="proto",
+        query_file="proto.scm",
+        module_name=_proto_module_name,
+        resolve_import=_proto_resolve_import,
+    ),
 }
 
 _EXTENSION_TO_LANGUAGE = {
@@ -125,6 +192,8 @@ _EXTENSION_TO_LANGUAGE = {
     ".jsx": "javascript",
     ".mjs": "javascript",
     ".cjs": "javascript",
+    ".go": "go",
+    ".proto": "proto",
 }
 
 
