@@ -97,9 +97,23 @@ def _embed_pass(root, *, quiet: bool, hook_safe: bool = False) -> int:
     from codesherpa.embed.engine import model_is_cached
     from codesherpa.store.sqlite_store import SQLiteIndexStore
 
+    from codesherpa.retrieve.warm import invalidation_pending
+
     store = SQLiteIndexStore(default_db_path(root))
     try:
         config = RetrievalConfig()
+        if not quiet and invalidation_pending(store, config.embed_model):
+            # one-time full re-embed must announce itself BEFORE the pass —
+            # a silent long sync after a routine pull reads as a hang
+            # (D30/D45 plan review, adjustment 2)
+            from codesherpa.retrieve.warm import EMBED_TEXT_VERSION, active_chunks
+
+            print(
+                f"sherpa: embed text format changed (v{EMBED_TEXT_VERSION}): "
+                f"re-embedding {len(active_chunks(store))} chunks, one time",
+                file=sys.stderr,
+                flush=True,
+            )
         missing = missing_embeddings(store)
         if missing and not quiet:
             if not model_is_cached(config.model_cache_dir, config.embed_model):
@@ -120,6 +134,7 @@ def _embed_pass(root, *, quiet: bool, hook_safe: bool = False) -> int:
             config=config,
             progress=None if quiet else _embed_progress_printer(),
             require_cached_model=hook_safe,
+            defer_invalidation=hook_safe,  # hooks never absorb a full re-embed
         )
     finally:
         store.close()

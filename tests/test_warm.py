@@ -112,3 +112,26 @@ def test_same_tag_never_wipes(store):
     embed_index(store, engine=engine)
     assert ensure_embedding_compat(store, embedding_tag("model-a")) is False
     assert missing_embeddings(store) == 0
+
+
+def test_invalidation_deferred_for_hook_syncs(store):
+    """Plan review adjustment 2: a pending tag change (model swap or
+    EMBED_TEXT_VERSION bump) must NOT trigger the full wipe/re-embed from a
+    hook-context pass — old vectors stay serviceable until a foreground
+    init/sync announces and performs the one-time re-embed."""
+    from codesherpa.retrieve.warm import invalidation_pending
+
+    _populate(store, 3)
+    engine_a = EmbeddingEngine(store, "model-a", encoder=_encoder(8))
+    assert embed_index(store, engine=engine_a) == 3
+
+    engine_b = EmbeddingEngine(store, "model-b", encoder=_encoder(8))
+    assert invalidation_pending(store, "model-b") is True
+    # hook context: defer — nothing wiped, nothing computed
+    assert embed_index(store, engine=engine_b, defer_invalidation=True) == 0
+    assert store.get_meta("embed_tag") == embedding_tag("model-a")
+    assert missing_embeddings(store) == 0  # old vectors untouched
+    # foreground context: wipe + recompute happens
+    assert embed_index(store, engine=engine_b) == 3
+    assert store.get_meta("embed_tag") == embedding_tag("model-b")
+    assert invalidation_pending(store, "model-b") is False

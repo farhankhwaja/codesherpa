@@ -28,12 +28,17 @@ __all__ = [
     "active_chunks",
     "missing_embeddings",
     "ensure_embedding_compat",
+    "invalidation_pending",
     "embed_index",
 ]
 
-EMBED_TEXT_VERSION = 1
+EMBED_TEXT_VERSION = 2
 """Version of the text handed to the embedder (EmbeddingEngine.chunk_text).
-Bump whenever that text changes shape so cached vectors are recomputed."""
+Bump whenever that text changes shape so cached vectors are recomputed.
+v2 (D45): Go receiver breadcrumb labels became package-qualified
+(`(goexport.Store)`) — on first sync after upgrade, indexes wipe stale
+vectors and re-embed (one-time; minutes to tens of minutes with index
+size)."""
 
 Progress = Callable[[int, int], None]
 """progress(done, total) — called before the first batch and after each one."""
@@ -98,6 +103,14 @@ def ensure_embedding_compat(store: IndexStore, tag: str) -> bool:
     return wiped
 
 
+def invalidation_pending(store: IndexStore, model_name: str) -> bool:
+    """True when the stored embed tag differs from the current one — the
+    next embedding pass will wipe and recompute EVERY vector (model change
+    or EMBED_TEXT_VERSION bump)."""
+    current = store.get_meta("embed_tag")
+    return current is not None and current != embedding_tag(model_name)
+
+
 def embed_index(
     store: IndexStore,
     *,
@@ -105,6 +118,7 @@ def embed_index(
     engine: Optional[EmbeddingEngine] = None,
     progress: Optional[Progress] = None,
     require_cached_model: bool = False,
+    defer_invalidation: bool = False,
 ) -> int:
     """Embed every active chunk that lacks a vector; returns the number computed.
 
@@ -124,6 +138,13 @@ def embed_index(
             cache_dir=cfg.model_cache_dir,
             trust_remote_code=cfg.embed_trust_remote_code,
         )
+    if defer_invalidation and invalidation_pending(store, engine.model_name):
+        # A tag change means a FULL wipe + re-embed (minutes to tens of
+        # minutes). Hook-triggered quiet syncs must never absorb that
+        # silently after a routine pull (plan review, adjustment 2): leave
+        # the old — still functional — vectors in place; the next
+        # FOREGROUND init/sync announces the reason and does the work.
+        return 0
     ensure_embedding_compat(store, embedding_tag(engine.model_name))
     misses = [
         chunk

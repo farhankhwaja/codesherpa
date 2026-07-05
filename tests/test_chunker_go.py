@@ -81,13 +81,14 @@ def test_method_breadcrumb_carries_receiver_type():
     chunks = chunk_ast(BLOB, GO_SOURCE, "pkg/store.go", "go", max_chunk=120)
     crumbs = [c.breadcrumb for c in chunks]
     save = next(c for c in crumbs if "func (s *Store) Save" in c)
-    assert ":: (Store) ::" in save, save  # pointer stripped, receiver surfaced
-    assert save.startswith("// pkg/store.go :: (Store) :: func (s *Store) Save")
+    # pointer stripped, receiver surfaced, package-qualified (D45)
+    assert ":: (pkg.Store) ::" in save, save
+    assert save.startswith("// pkg/store.go :: (pkg.Store) :: func (s *Store) Save")
     lookup = next(c for c in crumbs if "Lookup" in c)
-    assert ":: (Store) ::" in lookup
+    assert ":: (pkg.Store) ::" in lookup
     # plain functions do NOT get a receiver scope
     describe = next(c for c in crumbs if "func Describe" in c)
-    assert "(Store)" not in describe.split("::")[1]
+    assert "Store)" not in describe.split("::")[1]
 
 
 def test_oversized_struct_recurses_under_type_name():
