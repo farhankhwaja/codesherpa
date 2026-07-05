@@ -160,7 +160,11 @@ tools end up lying:
    i.e. what an agent without sherpa would have read (whole files) minus
    what sherpa returned (function-level chunks). File token sizes use the
    same ~4-chars/token estimate as budget accounting (blob size ÷ 4; no
-   tokenizer dependency). Every rendering of this number — terminal and
+   tokenizer dependency). This assumes the no-tool baseline would have read
+   whole files rather than targeted greps/slices — a skilled agent using
+   grep alone would likely fall somewhere between 'whole file' and 'just the
+   chunk,' so treat this as an upper-bound estimate, not a typical case.
+   Every rendering of this number — terminal and
    HTML — carries the word **estimated** next to it, by test-enforced rule.
 
 Analytics are **local-only**: rows live in your repo's own
