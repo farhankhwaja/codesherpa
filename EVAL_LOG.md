@@ -304,3 +304,22 @@ gate metrics in that entry were reproduced exactly and are unaffected).
 GOLDEN_DEEP=1 soak on fixture v3: PASS (also re-run independently by the
 verifier). Post-verification delta: generic-receiver methods now extracted
 (verifier finding 1 fixed on-branch with a pinned test), suite 324.
+
+## 2026-07-05 — fix/go-symbol-repetition pre-merge gate (b422865, clean checkout)
+Branch: feature/go-support + proto support (D44) + Go name-repetition fixes
+(D45: router anti-hijack, size-aware CE/vector blend, package-qualified Go
+receiver breadcrumbs, EMBED_TEXT_VERSION=2). Fresh py3.12 venv, fixture
+rebuilt from build_miniproject.py (v3, HEAD 6e1a7a1d0fee), 39-query gold set.
+
+| mode   | recall@5 | MRR   | p50 ms | p95 ms | misses |
+|--------|----------|-------|--------|--------|--------|
+| hybrid | 0.974    | 0.869 | 165.3  | 181.7  | q28    |
+| bm25   | 0.744    | 0.611 | 0.3    | 0.3    | 10 queries |
+| vector | 0.795    | 0.714 | 18.6   | 27.3   | 8 queries  |
+
+Hybrid recall by type: decoy=1.00 nl=1.00 nl_hard=0.89 stacktrace=1.00
+symbol=1.00. GATE: PASS — thresholds untouched; auto-blend resolves to
+w=4 on the fixture (small regime), so D45b does not perturb the gate.
+Full suite green (clean checkout), GOLDEN_DEEP green. Large-regime blend
+weight ships as TODO(upgrade): revalidate on a public large repo with a
+tuning/held-out split (prior measurement venue retracted from records).
