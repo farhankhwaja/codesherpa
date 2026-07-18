@@ -806,3 +806,188 @@ rate number proves insufficient).
 hand-rolled SVG (bar chart + stroke-dasharray donut), zero JS, zero network
 requests (test: no http(s) outside comments) — screenshots cleanly, dark
 theme.
+
+## D47 — Partial-AST salvage: degrade at declaration granularity, not file granularity (fix/partial-ast-salvage)
+
+**Problem (measured, not hypothetical).** `chunk_ast` was all-or-nothing: any
+`root.has_error` discarded the entire AST and line-windowed the whole file.
+On grafana/grafana `pkg/services` (1,954 Go files) 66 files (3.38%) trip
+`root.has_error`, and inside them **89.6% of top-level declarations (989 of
+1,104) parse perfectly** — all thrown away.
+
+The dominant cause is not ours to fix: grafana shadows Go's builtin `new` with
+a generic helper `func new[T any](v T) *T`, but the tree-sitter Go grammar
+hard-codes `new(` as taking a TYPE, so every `new(<expression>)` becomes an
+ERROR node *nested inside a function body*. Other repos will hit other grammar
+gaps; the general failure mode is "one bad expression costs a whole file its
+structure". It also blocks working-tree indexing: a file being actively edited
+almost always has a transient syntax error, i.e. we would offer zero structure
+exactly when the developer most needs it.
+
+**Design.** On `root.has_error`, `_salvage()` partitions the file over root's
+child *extents* (the same rule `_split` already uses: child *i* runs to child
+*i+1*'s start, so interstitial text stays with the preceding child).
+
+- child with `has_error == False` -> normal `_split` recursion: real cAST
+  chunks, full breadcrumbs, Go receiver scopes (D45) and all.
+- child with `has_error == True` -> `_line_window_pieces()` over just that
+  extent, breadcrumbed `path :: <decl> :: L<a>-<b> (syntax errors)` so no
+  consumer mistakes a guessed parse for a verified signature.
+
+**Byte-exactness (the hard part).** §7.2 requires that a blob's chunks rejoin
+into the original bytes. Two things protect it: (1) the salvage partition is
+built from the *same* extent rule as the clean path, so clean and tainted
+regions abut exactly with no gaps; (2) `_line_window_pieces` deliberately does
+NOT reuse `fallback.chunk_lines`, because that function overlaps its windows by
+`OVERLAP_LINES=20` — fine when it owns the whole blob, fatal when interleaved
+with cAST chunks. The salvage windows are a strict non-overlapping partition
+(still capped at `MAX_CHUNK_BYTES`, D38). `_merge` additionally refuses to glue
+a clean piece to a tainted one, so no chunk inherits a breadcrumb that lies
+about half its content. Tested directly (`tests/test_chunker_salvage.py`) and
+asserted on all 54 real salvaged grafana files during measurement.
+
+**Threshold — counted in declarations, not bytes.** `MAX_TAINTED_DECL_FRACTION
+= 0.5`: give up if more than half the top-level nodes are error-tainted. The
+first implementation used a tainted *non-whitespace byte* fraction and it was
+wrong: one 3,000-line tainted test function is 90%+ of a file's bytes while the
+47 declarations around it parse perfectly. At a 0.5 byte threshold, 25 of the
+66 grafana files fell back wholesale; at a 0.5 *declaration* threshold, 0 do
+(measured max tainted-declaration fraction across all 66 files is exactly
+0.500, median 0.128). Declaration share measures how much *structure* the
+parser lost, which is what salvage actually depends on.
+
+Two further wholesale-fallback guards:
+- an ERROR/MISSING node **directly under root** -> fall back wholesale. This is
+  the "top-level structure genuinely destroyed" case: the declaration
+  boundaries we would salvage against are themselves suspect. Contra the
+  briefing's measurement, this does occur on grafana — 3 of the 66 files, one
+  with root-level ERROR spans of 2.6 KB straddling several test functions.
+  Conservative and revisitable: relaxing it (treating root-level ERRORs as just
+  another tainted extent) would salvage ~199 more clean declarations, at the
+  risk of breadcrumbing text the parser re-synchronised in the wrong place.
+  Not a regression either way — those files line-window exactly as before.
+- no clean top-level child in `spec.definition_types` -> nothing structural to
+  salvage, fall back (9 grafana files, all 3-4 declaration test files whose
+  only clean children are `package`/`import`).
+
+**Measured result (grafana/grafana pkg/services, same corpus, before -> after).**
+
+| | before | after |
+|---|---|---|
+| files with `root.has_error` | 66 | 66 |
+| ...salvaged (partial AST) | 0 | 54 |
+| ...wholesale (root-level ERROR) | 66 | 3 |
+| ...wholesale (over threshold / no clean decl) | — | 9 |
+| clean top-level declarations in real cAST chunks | 0 | **654 of 989 (66.1%)** |
+| all clean top-level nodes in real cAST chunks | 0 | 1,063 of 1,520 (69.9%) |
+
+**Eval impact: none, and that is expected.** `eval/run_eval.py --mode all` on
+the fixture is unchanged (hybrid recall@5 0.974, MRR 0.869 — identical to
+main), because the miniproject fixture contains no syntactically-broken files.
+The win is on real repos with grammar gaps, quantified above; no threshold was
+touched. Full suite 351 -> 362 (11 added, none modified or removed).
+
+### D47a — the root-level-ERROR relaxation was TAKEN (owner decision, same branch)
+
+The original D47 above shipped the conservative rule: an ERROR/MISSING node
+directly under root triggered wholesale fallback, on the theory that top-level
+declaration boundaries were then untrustworthy. That entry recorded the
+measured cost of the choice (~199 recoverable declarations) and flagged it as
+revisitable. **The repo owner reviewed the tradeoff and took the relaxation.**
+The history above is left intact; this is the amendment.
+
+**Change.** A root-level ERROR/MISSING child is now just another tainted
+extent: its bytes go to line windows exactly like any nested-error region, and
+its clean siblings — whose subtrees the parser confirmed error-free — keep
+their cAST structure. No special-casing was needed in the loop, because
+`has_error` is already True for ERROR/MISSING nodes, so they count as tainted
+in both the threshold and the piece-building pass; the change is the deletion
+of the early-out. The other two guards are untouched:
+`MAX_TAINTED_DECL_FRACTION = 0.5` (declaration share, not bytes) and "no clean
+`definition_types` child -> wholesale".
+
+**Justification (the deciding case).** `pkg/services/ngalert/models/testing.go`
+is 45.7 KB with 222 top-level nodes, 210 of them clean. Its entire root-level
+damage is a **3-byte** ERROR extent. The conservative rule discarded all 210
+clean declarations to avoid a hypothetical mis-attribution; the relaxation
+recovers all 210. Discarding recoverable structure to avoid a hypothetical is
+the wrong trade, and the fallback safety still applies to whatever is genuinely
+broken — a top level that is really destroyed trips the declaration-share
+threshold anyway (test-pinned).
+
+**Re-measured (grafana/grafana pkg/services, 1,954 Go files, same corpus).**
+
+| | conservative (D47) | relaxed (D47a) |
+|---|---|---|
+| files salvaged (partial AST) | 54 | **57** |
+| wholesale: root-level ERROR | 3 | **0** |
+| wholesale: no clean declaration | 9 | 9 |
+| clean top-level **declarations** in cAST chunks | 654 / 989 (66.1%) | **842 / 989 (85.1%)** |
+| all clean top-level nodes in cAST chunks | 1,063 / 1,520 (69.9%) | **1,348 / 1,520 (88.7%)** |
+
+The 9 remaining wholesale files are all 3-4 declaration test files whose only
+clean top-level children are `package`/`import` — nothing structural to salvage.
+
+**Byte-exactness re-verified on every one of the 57 salvaged files** (strict
+partition: starts at 0, ends at EOF, no gap or overlap, rejoins to the original
+bytes), including the three that the conservative rule had rejected:
+
+| file | size | decls | clean | recovered | root-ERROR extents (bytes) |
+|---|---|---|---|---|---|
+| `ngalert/api/api_provisioning_test.go` | 127.6 KB | 57 | 51 | 42 | 12682, 5, 5, 3 |
+| `ngalert/api/api_ruler_test.go` | 55.8 KB | 49 | 40 | 33 | 2651, 3, 1927, 5, 1913 3 |
+| `ngalert/models/testing.go` | 45.7 KB | 222 | 210 | **210** | 3 |
+
+The straddling case is real and is the one that most stressed the partition:
+`api_ruler_test.go` has root-level ERROR extents of 2,651 / 1,927 / 1,913 bytes
+covering several test functions each. All are line-windowed contiguously and
+reassemble byte-exactly; both files are also deterministic across repeat runs.
+Synthetic equivalents of both shapes (tiny stray-brace ERROR with clean
+declarations on either side; ERROR swallowing several declarations) are pinned
+in `tests/test_chunker_salvage.py`.
+
+**Eval gate unchanged** (fixture has no broken files): hybrid recall@5 0.974,
+MRR 0.869. Thresholds untouched.
+
+**Test removed as superseded (not because it was failing).** Implementing the
+relaxation made `test_root_level_error_still_falls_back_wholesale` — added by
+this branch's own first commit, fe02e07 — assert the exact opposite of the
+decided behavior. It was **deleted**, on the repo owner's explicit decision,
+and the reasoning is recorded here so the removal is auditable:
+
+- The test does **not** exist on `main`: `git cat-file -e
+  main:tests/test_chunker_salvage.py` fails ("exists on disk, but not in
+  'main'"). It never guarded shipped behavior; it was introduced by fe02e07 on
+  this same unmerged branch.
+- CLAUDE.md §2.1's ratchet protects tests encoding *verified behavior on main*.
+  This assertion documented the deliberately-conservative half of a design the
+  owner has now explicitly reversed. It is **superseded by a decision, not
+  weakened to make a failing build pass** — the distinction is the point of
+  this note.
+- Coverage strictly increases: one assertion removed, five added. Among them,
+  `test_unterminated_declaration_at_eof_salvages_the_rest` pins the INVERSE
+  behavior on the deleted test's *exact* input (`func ((( broken`), so that
+  input is still exercised — now asserting salvage, byte-exactness and
+  determinism instead of wholesale fallback.
+- It was deleted rather than rewritten in place: the name asserts the opposite
+  of what now happens, and a renamed rewrite is delete-plus-add with a
+  confusing history.
+
+**Observed risk, NOT caused by this branch: p95 warm latency exceeds the §13
+budget on real repos.** Recorded here because it surfaced during this branch's
+verification and needs its own change; the next session should find it.
+
+| measurement | config | p95 | §13 budget |
+|---|---|---|---|
+| fixture, full suite under load (this branch) | shipping default | 502.5 ms | < 500 ms |
+| fixture, isolated on a quiet machine | shipping default | 259.3 ms | < 500 ms |
+| grafana index, 17,495 chunks (owner, independent) | shipping default (auto blend + rerank) | **614 ms** | < 500 ms |
+| grafana index, 17,495 chunks (owner) | w=2 / w=4 | **826 / 780 ms** | < 500 ms |
+
+The two data points are the same phenomenon at different scale: the gate passes
+on the 39-query fixture and fails in the field. This branch cannot be the cause
+— the miniproject fixture contains no syntactically-broken files, so salvage
+never triggers there and its chunk set is byte-identical to main's (the eval
+table is unchanged at 0.974 / 0.869 across both). Deliberately NOT addressed
+here: fixing it means touching the blend/rerank path, which is out of scope for
+a chunker change and would muddy this branch's attribution.
