@@ -16,8 +16,11 @@ publish; A/B raw-token target re-measure on a large repo.
 - fix/partial-ast-salvage: cAST no longer discards a whole file on
   `root.has_error` — clean top-level declarations keep real chunks, only
   error-tainted extents line-window (D47). Measured on grafana pkg/services:
-  0 → 654 of 989 clean declarations (66.1%) recovered across 54 of 66 broken
+  0 → 842 of 989 clean declarations (85.1%) recovered across 57 of 66 broken
   files; byte-exact partition preserved. Unblocks working-tree indexing.
+  D47a (owner decision): root-level ERROR relaxed from wholesale-fallback to
+  just-another-tainted-extent — 654 → 842 declarations; byte-exactness
+  re-verified on all 57 salvaged files incl. the 2.6 KB straddling ERROR spans.
 - feature/gain: `sherpa gain` local usage analytics (usage table, dispatch
   wrapper, privacy invariants test-pinned, terminal + self-contained HTML,
   README methodology) — D46, this branch
@@ -53,6 +56,12 @@ the ≥50 % raw-token target stays recorded as missed and moves to the
 roadmap as a large-repo re-measurement. BLOCKED.md deleted per charter.
 
 ## Notes for the next session
+- **OPEN RISK — §13 p95 warm latency fails in the field (not caused by
+  fix/partial-ast-salvage; needs its own change).** Fixture: 259 ms quiet /
+  502.5 ms under load vs a <500 ms budget. Grafana index (17,495 chunks):
+  614 ms on the shipping default, 826/780 ms at w=2/w=4. The gate passes on the
+  39-query fixture and fails on a real repo — see DECISIONS D47a for both data
+  points and why the chunker branch is ruled out.
 - **Branch protection (2026-07-05): `main` requires PRs — direct pushes are
   blocked. ALL work, including doc-only fixes, goes through a branch + PR
   with CI green before merge. No exceptions (the old "doc changes may push

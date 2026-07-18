@@ -161,15 +161,6 @@ def test_salvage_logs_what_it_salvaged(caplog: pytest.LogCaptureFixture) -> None
 # ------------------------------------------------------- wholesale thresholds
 
 
-def test_root_level_error_still_falls_back_wholesale(caplog: pytest.LogCaptureFixture) -> None:
-    """An ERROR node directly under root means the top-level structure itself
-    is unreadable — there are no trustworthy declaration boundaries to salvage."""
-    src = b"package main\n\nfunc ok() int { return 1 }\n\nfunc ((( broken\n"
-    with caplog.at_level(logging.WARNING, logger="codesherpa.chunker.cast"):
-        assert chunk_ast(BLOB, src, "bad.go", "go") is None
-    assert any("falling back to line windows" in r.message for r in caplog.records)
-
-
 def test_mostly_tainted_file_falls_back_wholesale() -> None:
     """Past MAX_TAINTED_DECL_FRACTION the declaration boundaries themselves are
     unreliable: salvaging a sliver of structure out of a mostly-unparsed file is
@@ -229,3 +220,113 @@ def test_salvage_generalises_to_python() -> None:
     assert any("def clean_one(a, b):" in c for c in crumbs), crumbs
     assert any("def clean_two(c):" in c for c in crumbs), crumbs
     assert any("syntax errors" in c for c in crumbs), crumbs
+
+
+# ------------------------------------------- root-level ERROR (D47 relaxation)
+
+# A stray closing brace at top level: tree-sitter emits a tiny ERROR node
+# directly under root with perfectly-parsed declarations on BOTH sides. This is
+# the shape of grafana's pkg/services/ngalert/models/testing.go, where a single
+# byte of root-level ERROR used to cost all 145 clean declarations in the file.
+GO_ROOT_ERROR = b"""package svc
+
+func Before() int {
+	return 1
+}
+}
+
+func AfterOne() int {
+	return 3
+}
+
+func AfterTwo() int {
+	return 4
+}
+"""
+
+# A root-level ERROR that STRADDLES several declarations (unbalanced brace
+# swallows everything to EOF) — grafana's api_ruler_test.go has ~2.6 KB spans of
+# this shape. Most likely case to produce a gap or overlap, so it is pinned.
+GO_ROOT_ERROR_STRADDLING = b"""package svc
+
+func Before() int {
+	return 1
+}
+
+func Straddle(a int) int {
+	if a > 0 {
+		return 2
+)
+
+func Swallowed(b int) int {
+	return b
+}
+
+func AlsoSwallowed() int {
+	return 3
+}
+"""
+
+
+def test_root_level_error_salvages_its_clean_siblings() -> None:
+    """D47 relaxation (owner decision): an ERROR/MISSING node directly under
+    root is just another tainted extent — it must not cost the whole file its
+    structure. The clean siblings' subtrees were confirmed error-free."""
+    chunks = chunk_ast(BLOB, GO_ROOT_ERROR, "pkg/svc/testing.go", "go")
+    assert chunks is not None, "a stray brace must not discard the whole file"
+    clean = [c for c in chunks if "syntax errors" not in c.breadcrumb]
+    clean_code = "".join(c.code for c in clean)
+    for name in ("func Before", "func AfterOne", "func AfterTwo"):
+        assert name in clean_code, (name, [c.breadcrumb for c in chunks])
+    # the stray brace itself is covered, and flagged
+    tainted = [c for c in chunks if "syntax errors" in c.breadcrumb]
+    assert tainted
+    assert b"}" in b"".join(GO_ROOT_ERROR[c.byte_start : c.byte_end] for c in tainted)
+
+
+def test_root_level_error_is_byte_exact_and_deterministic() -> None:
+    for src in (GO_ROOT_ERROR, GO_ROOT_ERROR_STRADDLING):
+        chunks = chunk_blob(BLOB, src, "pkg/svc/testing.go")
+        _reassemble(chunks, src)
+        assert chunks == chunk_blob(BLOB, src, "pkg/svc/testing.go")
+
+
+def test_root_level_error_straddling_declarations_is_byte_exact() -> None:
+    """The ERROR node swallows several declarations at once: its whole extent
+    must be covered by line windows with no gap or overlap against the clean
+    declarations before it."""
+    chunks = chunk_ast(BLOB, GO_ROOT_ERROR_STRADDLING, "pkg/svc/ruler_test.go", "go")
+    assert chunks is not None
+    _reassemble(chunks, GO_ROOT_ERROR_STRADDLING)
+    clean_code = "".join(c.code for c in chunks if "syntax errors" not in c.breadcrumb)
+    assert "func Before" in clean_code
+    # everything the ERROR node swallowed is line-windowed, not silently dropped
+    tainted_code = "".join(c.code for c in chunks if "syntax errors" in c.breadcrumb)
+    assert "func Swallowed" in tainted_code
+    assert "func AlsoSwallowed" in tainted_code
+
+
+def test_unterminated_declaration_at_eof_salvages_the_rest() -> None:
+    """Pins the INVERSE of the behavior asserted by the test D47a removed, on
+    that test's exact input: an unterminated declaration at EOF is a root-level
+    ERROR, and the complete declaration before it must survive."""
+    src = b"package main\n\nfunc ok() int { return 1 }\n\nfunc ((( broken\n"
+    chunks = chunk_ast(BLOB, src, "bad.go", "go")
+    assert chunks is not None, "the whole file must no longer be discarded"
+    clean_code = "".join(c.code for c in chunks if "syntax errors" not in c.breadcrumb)
+    assert "func ok() int { return 1 }" in clean_code
+    tainted_code = "".join(c.code for c in chunks if "syntax errors" in c.breadcrumb)
+    assert "func ((( broken" in tainted_code
+    _reassemble(chunks, src)
+    assert chunks == chunk_ast(BLOB, src, "bad.go", "go")
+
+
+def test_root_level_error_still_falls_back_when_mostly_tainted() -> None:
+    """The relaxation does not disable the threshold: a top level that is
+    genuinely destroyed trips MAX_TAINTED_DECL_FRACTION anyway."""
+    tainted = "\n\n".join(
+        f'func Tainted{i}(v string) *string {{\n\treturn new(v + "{i}")\n}}' for i in range(6)
+    )
+    src = f"package svc\n\nfunc Ok() int {{\n\treturn 1\n}}\n}}\n\n{tainted}\n".encode()
+    assert chunk_ast(BLOB, src, "pkg/svc/hopeless.go", "go") is None
+    assert chunk_blob(BLOB, src, "pkg/svc/hopeless.go")  # never crashes

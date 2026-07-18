@@ -300,13 +300,14 @@ def _salvage(
     if not extents:
         return None
 
-    # An ERROR/MISSING node directly under root means the top-level structure
-    # itself did not parse: the declaration boundaries we would salvage against
-    # are not trustworthy. (Measured on grafana/grafana: this never happens for
-    # the nested-expression grammar gaps this feature targets.)
-    if any(child.is_error or child.is_missing for child, _, _ in extents):
-        return None
-
+    # An ERROR/MISSING node directly under root is treated as just another
+    # tainted extent (D47 relaxation): its bytes go to line windows like any
+    # other unparsed region, and its clean siblings — whose subtrees the parser
+    # confirmed error-free — keep their structure. The declaration-share
+    # threshold below is what decides whether the file is beyond saving; a file
+    # whose top level is genuinely destroyed trips it anyway.
+    # `has_error` is already True for ERROR/MISSING nodes, so they count as
+    # tainted in both the threshold and the loop with no special-casing.
     tainted = sum(1 for child, _, _ in extents if child.has_error)
     if tainted / len(extents) > MAX_TAINTED_DECL_FRACTION:
         return None
