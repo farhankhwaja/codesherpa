@@ -806,3 +806,83 @@ rate number proves insufficient).
 hand-rolled SVG (bar chart + stroke-dasharray donut), zero JS, zero network
 requests (test: no http(s) outside comments) — screenshots cleanly, dark
 theme.
+
+## D47 — Partial-AST salvage: degrade at declaration granularity, not file granularity (fix/partial-ast-salvage)
+
+**Problem (measured, not hypothetical).** `chunk_ast` was all-or-nothing: any
+`root.has_error` discarded the entire AST and line-windowed the whole file.
+On grafana/grafana `pkg/services` (1,954 Go files) 66 files (3.38%) trip
+`root.has_error`, and inside them **89.6% of top-level declarations (989 of
+1,104) parse perfectly** — all thrown away.
+
+The dominant cause is not ours to fix: grafana shadows Go's builtin `new` with
+a generic helper `func new[T any](v T) *T`, but the tree-sitter Go grammar
+hard-codes `new(` as taking a TYPE, so every `new(<expression>)` becomes an
+ERROR node *nested inside a function body*. Other repos will hit other grammar
+gaps; the general failure mode is "one bad expression costs a whole file its
+structure". It also blocks working-tree indexing: a file being actively edited
+almost always has a transient syntax error, i.e. we would offer zero structure
+exactly when the developer most needs it.
+
+**Design.** On `root.has_error`, `_salvage()` partitions the file over root's
+child *extents* (the same rule `_split` already uses: child *i* runs to child
+*i+1*'s start, so interstitial text stays with the preceding child).
+
+- child with `has_error == False` -> normal `_split` recursion: real cAST
+  chunks, full breadcrumbs, Go receiver scopes (D45) and all.
+- child with `has_error == True` -> `_line_window_pieces()` over just that
+  extent, breadcrumbed `path :: <decl> :: L<a>-<b> (syntax errors)` so no
+  consumer mistakes a guessed parse for a verified signature.
+
+**Byte-exactness (the hard part).** §7.2 requires that a blob's chunks rejoin
+into the original bytes. Two things protect it: (1) the salvage partition is
+built from the *same* extent rule as the clean path, so clean and tainted
+regions abut exactly with no gaps; (2) `_line_window_pieces` deliberately does
+NOT reuse `fallback.chunk_lines`, because that function overlaps its windows by
+`OVERLAP_LINES=20` — fine when it owns the whole blob, fatal when interleaved
+with cAST chunks. The salvage windows are a strict non-overlapping partition
+(still capped at `MAX_CHUNK_BYTES`, D38). `_merge` additionally refuses to glue
+a clean piece to a tainted one, so no chunk inherits a breadcrumb that lies
+about half its content. Tested directly (`tests/test_chunker_salvage.py`) and
+asserted on all 54 real salvaged grafana files during measurement.
+
+**Threshold — counted in declarations, not bytes.** `MAX_TAINTED_DECL_FRACTION
+= 0.5`: give up if more than half the top-level nodes are error-tainted. The
+first implementation used a tainted *non-whitespace byte* fraction and it was
+wrong: one 3,000-line tainted test function is 90%+ of a file's bytes while the
+47 declarations around it parse perfectly. At a 0.5 byte threshold, 25 of the
+66 grafana files fell back wholesale; at a 0.5 *declaration* threshold, 0 do
+(measured max tainted-declaration fraction across all 66 files is exactly
+0.500, median 0.128). Declaration share measures how much *structure* the
+parser lost, which is what salvage actually depends on.
+
+Two further wholesale-fallback guards:
+- an ERROR/MISSING node **directly under root** -> fall back wholesale. This is
+  the "top-level structure genuinely destroyed" case: the declaration
+  boundaries we would salvage against are themselves suspect. Contra the
+  briefing's measurement, this does occur on grafana — 3 of the 66 files, one
+  with root-level ERROR spans of 2.6 KB straddling several test functions.
+  Conservative and revisitable: relaxing it (treating root-level ERRORs as just
+  another tainted extent) would salvage ~199 more clean declarations, at the
+  risk of breadcrumbing text the parser re-synchronised in the wrong place.
+  Not a regression either way — those files line-window exactly as before.
+- no clean top-level child in `spec.definition_types` -> nothing structural to
+  salvage, fall back (9 grafana files, all 3-4 declaration test files whose
+  only clean children are `package`/`import`).
+
+**Measured result (grafana/grafana pkg/services, same corpus, before -> after).**
+
+| | before | after |
+|---|---|---|
+| files with `root.has_error` | 66 | 66 |
+| ...salvaged (partial AST) | 0 | 54 |
+| ...wholesale (root-level ERROR) | 66 | 3 |
+| ...wholesale (over threshold / no clean decl) | — | 9 |
+| clean top-level declarations in real cAST chunks | 0 | **654 of 989 (66.1%)** |
+| all clean top-level nodes in real cAST chunks | 0 | 1,063 of 1,520 (69.9%) |
+
+**Eval impact: none, and that is expected.** `eval/run_eval.py --mode all` on
+the fixture is unchanged (hybrid recall@5 0.974, MRR 0.869 — identical to
+main), because the miniproject fixture contains no syntactically-broken files.
+The win is on real repos with grammar gaps, quantified above; no threshold was
+touched. Full suite 351 -> 362 (11 added, none modified or removed).

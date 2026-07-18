@@ -13,6 +13,11 @@ blend weight + router ambiguity threshold on a public large repo
 publish; A/B raw-token target re-measure on a large repo.
 
 ## Done (one line each, with commit hash)
+- fix/partial-ast-salvage: cAST no longer discards a whole file on
+  `root.has_error` — clean top-level declarations keep real chunks, only
+  error-tainted extents line-window (D47). Measured on grafana pkg/services:
+  0 → 654 of 989 clean declarations (66.1%) recovered across 54 of 66 broken
+  files; byte-exact partition preserved. Unblocks working-tree indexing.
 - feature/gain: `sherpa gain` local usage analytics (usage table, dispatch
   wrapper, privacy invariants test-pinned, terminal + self-contained HTML,
   README methodology) — D46, this branch
