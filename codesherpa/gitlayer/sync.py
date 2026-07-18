@@ -20,7 +20,6 @@ from pathlib import Path
 from codesherpa.chunker import chunk_blob, detect_language
 from codesherpa.gitlayer.ignore import IgnoreRules, looks_binary
 from codesherpa.graph.index import sync_graph
-from codesherpa.graph.languages import language_for_path as graph_language
 from codesherpa.gitlayer.lock import FileLock
 from codesherpa.gitlayer.repo import (
     blob_size,
@@ -162,12 +161,12 @@ def _sync_locked(
     # Phase 4: symbols/edges are a pure function of the active mapping and are
     # recomputed + replaced every sync (sherpa/graph/index.py, DECISIONS
     # D19). Chunks/embeddings above stay incremental — that is the §4 insight.
-    graph_blobs = {
-        blob: read_blob(repo, blob)
-        for path, blob in file_map.items()
-        if graph_language(path) is not None
-    }
-    stats.symbols_indexed, stats.edges_indexed = sync_graph(store, file_map, graph_blobs)
+    # The per-blob extraction cache (D50) means this reads and parses only
+    # blobs whose facts are not cached yet, so the reader is passed lazily
+    # rather than prefetching every active blob's bytes.
+    stats.symbols_indexed, stats.edges_indexed = sync_graph(
+        store, file_map, lambda blob: read_blob(repo, blob)
+    )
 
     store.set_meta("last_sync", datetime.now(timezone.utc).isoformat())
     store.set_meta("last_sync_head", stats.head or "")

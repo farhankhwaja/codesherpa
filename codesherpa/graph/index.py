@@ -8,56 +8,118 @@ the graph tables are recomputed from the full active set and REPLACED on
 every sync — a pure function of (path -> blob -> bytes), so the Golden Test
 holds by construction (DECISIONS.md D19).
 
-Cost: one tree-sitter reparse of the active set per sync (~150k LOC/s per
-EVAL_LOG Phase 2 numbers), while chunking and the embedding cache — the
-expensive per-blob work — stay fully incremental. TODO(upgrade): persist
-per-blob extraction facts (defs/sites/imports are path-independent) so only
-the cross-file resolution pass reruns per sync.
+What IS cacheable is tree-sitter pass 1. Definitions, call/reference sites and
+imports are a pure function of (blob bytes, language) — path-independent — so
+they are persisted per blob in ``graph_facts`` and replayed on later syncs
+(D47). Only genuinely new blobs are read and parsed; the cross-file resolution
+pass still runs over the full active set, which is what preserves correctness.
+The cache is invalidated wholesale when ``extraction_tag()`` changes (payload
+version, query-file edit, or grammar upgrade), mirroring ``embed_tag``.
 
 Ownership note: this module is the write side of the indexing pipeline and
 is invoked only by ``gitlayer.sync``, which is already bound to the concrete
-:class:`SQLiteIndexStore` (it constructs it). The two ``DELETE`` statements
-here are the only concrete-store access in ``codesherpa/graph``; every query
-path (SymbolGraph, MCP, retrieval) depends on the frozen ABC only.
+:class:`SQLiteIndexStore` (it constructs it). The concrete-store access here
+is the only such access in ``codesherpa/graph``; every query path (SymbolGraph,
+MCP, retrieval) depends on the frozen ABC only.
 """
 
 from __future__ import annotations
 
-from codesherpa.graph.extract import SourceFile, extract_project
+from typing import Callable
+
+from codesherpa.graph.extract import (
+    CachedFile,
+    SourceFile,
+    encode_facts,
+    extract_project_cached,
+    extraction_tag,
+)
 from codesherpa.graph.languages import language_for_path
 from codesherpa.store.sqlite_store import SQLiteIndexStore
 
 __all__ = ["sync_graph"]
 
+_TAG_KEY = "graph_facts_tag"
+
+
+def _ensure_facts_compat(store: SQLiteIndexStore) -> bool:
+    """Drop cached facts when the extractor identity changed; True if wiped.
+
+    A tag change means the persisted payloads were produced by a different
+    extractor (payload version, query files, or grammar) — replaying them would
+    silently yield symbols/edges that a rebuild would not produce.
+    """
+    tag = extraction_tag()
+    if store.get_meta(_TAG_KEY) == tag:
+        return False
+    wiped = store.get_meta(_TAG_KEY) is not None
+    with store.conn:
+        store.conn.execute("DELETE FROM graph_facts")
+    store.set_meta(_TAG_KEY, tag)
+    return wiped
+
 
 def sync_graph(
     store: SQLiteIndexStore,
     file_map: dict[str, str],
-    blob_data: dict[str, bytes],
+    read_blob: Callable[[str], bytes],
 ) -> tuple[int, int]:
     """Recompute symbols/edges for the active mapping; returns (n_sym, n_edge).
 
-    ``file_map`` is the active path -> blob mapping being synced;
-    ``blob_data`` must contain the bytes of every graph-supported blob in it.
-    Deterministic: identical inputs produce identical tables.
+    ``file_map`` is the active path -> blob mapping being synced. ``read_blob``
+    fetches a blob's bytes and is called ONLY for blobs whose extraction facts
+    are not cached yet — that is the whole point: an unchanged repo re-syncs
+    without reading or parsing a single file.
+
+    Deterministic: identical inputs produce identical tables, whether the facts
+    came from the cache or from a fresh parse.
     """
-    files = []
+    _ensure_facts_compat(store)
+
+    entries: list[CachedFile] = []
+    fresh: list[tuple[str, str, str]] = []  # (blob_hash, language, payload)
+    seen: dict[tuple[str, str], str] = {}  # (blob, language) -> payload
+
     for path in sorted(file_map):
         language = language_for_path(path)
         if language is None:
             continue
         blob_hash = file_map[path]
-        if blob_hash not in blob_data:
-            continue
-        files.append(
-            SourceFile(
-                path=path, blob_hash=blob_hash, language=language, data=blob_data[blob_hash]
+        key = (blob_hash, language)
+        payload = seen.get(key)
+        if payload is None:
+            row = store.conn.execute(
+                "SELECT facts FROM graph_facts WHERE blob_hash = ? AND language = ?",
+                (blob_hash, language),
+            ).fetchone()
+            if row is not None:
+                payload = row[0]
+            else:
+                payload = encode_facts(
+                    SourceFile(
+                        path=path,
+                        blob_hash=blob_hash,
+                        language=language,
+                        data=read_blob(blob_hash),
+                    )
+                )
+                fresh.append((blob_hash, language, payload))
+            seen[key] = payload
+        entries.append(
+            CachedFile(
+                path=path, blob_hash=blob_hash, language=language, payload=payload
             )
         )
 
-    symbols, edges = extract_project(files)
+    symbols, edges = extract_project_cached(entries)
 
     with store.conn:  # one transaction: replace-all, like map_files does per ref
+        if fresh:
+            store.conn.executemany(
+                "INSERT OR REPLACE INTO graph_facts (blob_hash, language, facts) "
+                "VALUES (?, ?, ?)",
+                fresh,
+            )
         store.conn.execute("DELETE FROM symbols")
         store.conn.execute("DELETE FROM edges")
     store.add_symbols(symbols)

@@ -89,6 +89,29 @@ CREATE TABLE IF NOT EXISTS edges (
 
 CREATE INDEX IF NOT EXISTS idx_edges_dst ON edges(dst);
 
+-- Per-blob symbol-extraction cache (D47). Symbols and edges themselves are a
+-- GLOBAL function of the active file mapping and are still recomputed and
+-- REPLACED every sync (D19) — but tree-sitter pass 1 (definitions, call/ref
+-- sites, imports) is path-independent, so its output is cached per blob and
+-- replayed instead of reparsing the whole active set. Only the cross-file
+-- resolution pass reruns, which is what preserves incremental == rebuild.
+--
+-- Keyed by (blob_hash, language): one blob may be reachable at paths with
+-- different extensions, and the language selects the tree-sitter grammar and
+-- query file. facts is the JSON payload from graph.extract.encode_facts.
+--
+-- INVALIDATION: meta['graph_facts_tag'] holds graph.extract.extraction_tag()
+-- (payload version + queries digest + grammar versions). When it changes, the
+-- whole table is dropped on the next sync — same contract as embed_tag for
+-- the embedding cache. Rows are never otherwise pruned: blobs are never
+-- deleted, so a blob that becomes active again reuses its cached facts free.
+CREATE TABLE IF NOT EXISTS graph_facts (
+    blob_hash TEXT NOT NULL,
+    language  TEXT NOT NULL,
+    facts     TEXT NOT NULL,
+    PRIMARY KEY (blob_hash, language)
+);
+
 -- Permanent embedding cache: an embedding is computed at most once per unique
 -- chunk_id, ever. vector is little-endian float32, dim floats.
 CREATE TABLE IF NOT EXISTS embeddings (
