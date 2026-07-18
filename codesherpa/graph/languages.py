@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import posixpath
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Callable, Optional
 
 # (module_text, importer_path, project_paths) -> repo-relative path or None
@@ -112,17 +113,33 @@ def _go_resolve_import(
     text = module_text.strip().strip('"`')
     if not text:
         return None
+    directories = _go_package_dirs(project_paths)
     parts = [p for p in text.split("/") if p]
     for i in range(len(parts)):
-        directory = "/".join(parts[i:])
-        files = sorted(
-            path
-            for path in project_paths
-            if path.endswith(".go") and posixpath.dirname(path) == directory
-        )
-        if files:
-            return files[0]
+        found = directories.get("/".join(parts[i:]))
+        if found is not None:
+            return found
     return None
+
+
+@lru_cache(maxsize=4)
+def _go_package_dirs(project_paths: frozenset[str]) -> dict[str, str]:
+    """directory -> its lexicographically first .go file.
+
+    Built once per project path set instead of rescanning every path for every
+    import: the naive form was O(imports x paths) and dominated sync wall-time
+    on Go repos (D50). Same answer as the scan — the minimum is the same
+    element ``sorted(...)[0]`` returned.
+    """
+    first: dict[str, str] = {}
+    for path in project_paths:
+        if not path.endswith(".go"):
+            continue
+        directory = posixpath.dirname(path)
+        current = first.get(directory)
+        if current is None or path < current:
+            first[directory] = path
+    return first
 
 
 # ---------------------------------------------------------------- proto

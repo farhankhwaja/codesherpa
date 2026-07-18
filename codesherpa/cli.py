@@ -1,7 +1,7 @@
 """sherpa command-line interface.
 
-init/sync/status (Phase 1), serve (Phase 4), search (Phase 5) are live;
-bench remains a roadmap wrapper over tests/bench_indexing.py.
+init/sync/status (Phase 1), serve (Phase 4), search (Phase 5), gain and bench
+(D49) are all live — every advertised subcommand does real work.
 """
 
 from __future__ import annotations
@@ -10,10 +10,6 @@ import argparse
 import sys
 
 from codesherpa import __version__
-
-_PHASE_OF = {
-    "bench": 6,  # roadmap: a user-facing wrapper over tests/bench_indexing.py
-}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -52,7 +48,44 @@ def build_parser() -> argparse.ArgumentParser:
     p_serve = sub.add_parser("serve", help="Run the MCP stdio server.")
     p_serve.add_argument("path", nargs="?", default=".", help="Repository root (default: cwd).")
 
-    sub.add_parser("bench", help="Run indexing/retrieval benchmarks.")
+    p_bench = sub.add_parser(
+        "bench",
+        help="Benchmark this repo: cold-index throughput and warm query latency.",
+        description=(
+            "Measures indexing throughput and retrieval latency on this repository. "
+            "Indexing is timed against a throwaway database — the repo's own "
+            ".sherpa/index.db is never written. Retrieval runs real queries through "
+            "the existing index."
+        ),
+    )
+    p_bench.add_argument(
+        "--indexing", action="store_true", help="Only run the indexing benchmark."
+    )
+    p_bench.add_argument(
+        "--retrieval", action="store_true", help="Only run the retrieval benchmark."
+    )
+    p_bench.add_argument(
+        "--queries",
+        type=int,
+        default=20,
+        help="How many queries to time (default: 20).",
+    )
+    p_bench.add_argument(
+        "--query-file",
+        help="Read queries from this file, one per line, instead of sampling the index.",
+    )
+    p_bench.add_argument(
+        "--budget-tokens", type=int, default=4000, help="Token budget per query."
+    )
+    p_bench.add_argument(
+        "--synthetic",
+        nargs="?",
+        type=int,
+        const=400,
+        metavar="N",
+        help="Indexing throughput on a freshly generated N-module corpus "
+        "(default 400) instead of this repo — the EVAL_LOG reference workload.",
+    )
 
     p_gain = sub.add_parser(
         "gain",
@@ -301,6 +334,73 @@ def _cmd_gain(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_bench(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from codesherpa import bench
+    from codesherpa.gitlayer.repo import NotARepositoryError, open_repo, repo_root
+    from codesherpa.retrieve import IndexNotBuiltError, build_retriever
+
+    if args.synthetic is not None:
+        print(bench.render_indexing(bench.bench_synthetic(args.synthetic)))
+        return 0
+
+    try:
+        root = repo_root(open_repo("."))
+    except NotARepositoryError as exc:
+        print(f"sherpa bench: {exc}", file=sys.stderr)
+        return 1
+
+    # neither flag given == run both
+    do_indexing = args.indexing or not args.retrieval
+    do_retrieval = args.retrieval or not args.indexing
+
+    if do_indexing:
+        print(bench.render_indexing(bench.bench_repo_indexing(root)))
+        if do_retrieval:
+            print()
+
+    if not do_retrieval:
+        return 0
+
+    try:
+        retriever, store = build_retriever(".")
+    except IndexNotBuiltError as exc:
+        print(f"sherpa bench: {exc}", file=sys.stderr)
+        return 1
+    try:
+        if args.query_file:
+            try:
+                lines = Path(args.query_file).read_text(encoding="utf-8").splitlines()
+            except OSError as exc:
+                print(f"sherpa bench: cannot read {args.query_file}: {exc}", file=sys.stderr)
+                return 1
+            queries = [line.strip() for line in lines if line.strip()][: args.queries]
+            source = args.query_file
+        else:
+            queries = bench.sample_queries(store, args.queries)
+            source = "symbols sampled from this index"
+        if not queries:
+            print(
+                "sherpa bench: no queries to run — the index has no symbols yet.",
+                file=sys.stderr,
+            )
+            return 1
+        print(
+            bench.render_retrieval(
+                bench.bench_retrieval(
+                    retriever,
+                    queries,
+                    budget_tokens=args.budget_tokens,
+                    source=source,
+                )
+            )
+        )
+    finally:
+        store.close()
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -324,13 +424,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "gain":
         return _cmd_gain(args)
+    if args.command == "bench":
+        return _cmd_bench(args)
 
-    phase = _PHASE_OF[args.command]
-    print(
-        f"sherpa {args.command}: not implemented yet (arrives in Phase {phase}).",
-        file=sys.stderr,
-    )
-    return 2
+    parser.error(f"unknown command {args.command!r}")
+    return 2  # pragma: no cover - parser.error exits
 
 
 if __name__ == "__main__":

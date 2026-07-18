@@ -991,3 +991,127 @@ never triggers there and its chunk set is byte-identical to main's (the eval
 table is unchanged at 0.974 / 0.869 across both). Deliberately NOT addressed
 here: fixing it means touching the blend/rerank path, which is out of scope for
 a chunker change and would muddy this branch's attribution.
+
+> Renumbering note (2026-07-18): D48/D49/D50 below were originally written
+> as D47/D48/D49 on this branch, in parallel with `fix/partial-ast-salvage`
+> claiming D47/D47a for partial-AST salvage (earlier by commit time, so it
+> keeps the number). Commit messages on this branch (`f0db70f`, `3b36e64`,
+> `8566c51`, `a7d0d2b`) still say D47–D49; they are not rewritten because
+> that would break their GPG signatures. Map: cache=D48, bench=D49, Go
+> import fix=D50.
+
+## D48 — Per-blob graph extraction cache (feat/bench-and-graph-cache)
+
+Resolves the `TODO(upgrade)` that stood at the top of `graph/index.py`:
+`sync_graph()` re-parsed the FULL active set on every sync, so a repo with
+thousands of files paid a complete tree-sitter pass even when nothing changed.
+
+**What is cached, and what deliberately is not.** D19 remains true and
+unweakened: symbols and edges are a *global* function of the active file
+mapping, so the graph tables are still recomputed and REPLACED every sync, and
+the cross-file resolution pass (`extract.
+_resolve_project`) still runs over the whole active set. What is cacheable is
+tree-sitter **pass 1** — definitions, call/reference sites, imports, Go local
+types and receivers. Those are a pure function of (blob bytes, language):
+path-independent, hence content-addressed like every other table (§4).
+
+`_FileFacts` was refactored to hold `path`/`blob_hash`/`language` instead of a
+`SourceFile`, deliberately dropping any reference to the file's bytes — if pass
+2 could reach the bytes, the cache could not skip reading the blob at all.
+Payloads are JSON in a new `graph_facts(blob_hash, language, facts)` table,
+keyed by language as well as blob because one blob may be reachable at paths
+with different extensions (`.ts` vs `.js`) and the language selects the grammar.
+`decode_facts` re-derives the path-dependent trimmings (module node, file_path)
+so one cached row serves a blob at any number of paths.
+
+**Invalidation** follows the `embed_tag` pattern (D30b) exactly, via
+`meta['graph_facts_tag'] = extraction_tag()`:
+
+    v{GRAPH_FACTS_VERSION}|q={sha256 of all queries/*.scm}|tree-sitter=X,tree-sitter-language-pack=Y
+
+Three independent triggers. The manual `GRAPH_FACTS_VERSION` covers changes to
+what pass 1 collects; the query digest covers `.scm` edits automatically; the
+distribution versions cover grammar upgrades. The last two are automatic on
+purpose — the Golden Test compares two runs of the SAME code, so it structurally
+cannot catch a stale payload written by an older sherpa, and relying on a human
+to remember a version bump was the one failure mode that would silently corrupt
+symbols. On tag mismatch the whole table is dropped. Rows are never otherwise
+pruned: blobs are never deleted, so a blob that becomes active again is free.
+
+**Correctness.** `tests/test_graph_facts_cache.py` pins the load-bearing
+invariant directly (`extract_project_cached(...) == extract_project(...)`),
+payload path-independence, tag composition, stale-tag wipe, that a no-op sync
+parses ZERO blobs, that an edit reparses exactly one, and an incremental-vs-
+rebuild echo of the Golden Test aimed at the graph tables. Golden Test green in
+both normal and `GOLDEN_DEEP=1` mode.
+
+**Measured** (grafana `pkg/`, 7,032 files / 6,322 blobs / 53,200 symbols /
+286,774 edges, same machine, back-to-back; full numbers and the isolation of
+each change in EVAL_LOG.md):
+
+| | cold sync | no-op re-sync |
+|---|---|---|
+| main | 187.85 s | 164.93 s |
+| + D48 + D50 | 20.17 s | 7.52 s |
+
+Honest isolation on a 2,000-file subset: the cache ALONE moved a no-op sync
+30.9 s -> 29.5 s (1.05x). Its real contribution only became visible after D50
+removed a quadratic import-resolution hot spot that dominated everything:
+with D50 in place the cache moves 4.65 s -> 1.90 s (2.4x). Reported this way
+rather than claiming the combined 21.9x for the cache alone.
+
+## D49 — `sherpa bench` becomes a real command (feat/bench-and-graph-cache)
+
+`bench` was the last advertised-but-unimplemented subcommand (a stub returning
+exit 2). It now measures two things on real data:
+
+* **indexing** — a genuine cold index of the current repo into a THROWAWAY
+  database, then a second sync to time the incremental path. The repo's own
+  `.sherpa/index.db` is never opened for writing: benchmarking must not disturb
+  the live index.
+* **retrieval** — real queries through the existing index and the real hybrid
+  pipeline; p50/p95 overall and split by path taken (router/dense), labeled
+  with the §13 gates. A warm-up query is excluded so model load is not counted
+  as query latency.
+
+No mock data (§2.5): queries are either read from `--query-file` or sampled
+from the index itself (most-referenced definitions, deterministic order), and
+the output states which. Nothing is printed that was not measured — e.g. no
+throughput line when elapsed time is zero.
+
+`tests/bench_indexing.py` was NOT duplicated: its logic moved to
+`codesherpa/bench.py` and the script is now a thin CLI over
+`bench_synthetic()`, so `sherpa bench --synthetic` and the EVAL_LOG reference
+workload are the same implementation. Failure modes mirror `search`/`gain`:
+a friendly one-line message and exit 1 for a missing index or non-repository,
+never a traceback.
+
+**Test-probe move.** `test_unimplemented_subcommand_exits_nonzero` probed
+`bench` as the last unimplemented command. With no unimplemented command left,
+the probe moves — as it did in D5 (status -> search) and D29 (search -> serve) —
+to an unknown subcommand, the nearest remaining "sherpa must refuse a command
+it cannot serve" case. Assertions are not weakened: still exit code 2, still an
+explanatory stderr message, plus a new assertion that no traceback is printed.
+Two tests were added for the new behavior. Suite: 351 -> 363, none removed.
+
+## D50 — Go import resolution was quadratic (feat/bench-and-graph-cache)
+
+Found while measuring D48, not looked for. `_go_resolve_import` scanned EVERY
+project path — calling `posixpath.dirname` on each — for every candidate tail
+of every import. On grafana's `pkg/` that was 113 MILLION `dirname` calls per
+sync, 98% of total sync wall-time, and it dwarfed the change I was trying to
+measure. It also made large Go repos effectively unindexable: a 7,032-file tree
+took over three minutes per sync, and full grafana (15,088 graph-language
+files) never completed.
+
+Fixed by building `directory -> lexicographically-first .go file` once per
+project path set (`lru_cache(maxsize=4)` on the frozenset) and looking tails up
+in it. Semantically identical — the minimum is the same element the old
+`sorted(...)[0]` returned — so this is a pure optimization; the Golden Test and
+the Go extraction tests pin that. Measured: no-op sync on grafana `pkg/`
+164.93 s -> 7.52 s combined with D48; D50 alone accounts for 30.9 s -> 4.65 s
+on the 2,000-file subset (6.6x).
+
+Not generalized to the other languages: Python/TS/proto resolution is already
+set-membership or a single suffix scan, and only Go's module-qualified paths
+require the tail search that made the scan quadratic.

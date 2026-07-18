@@ -30,17 +30,47 @@ def test_console_script_help_runs() -> None:
     assert "sherpa" in result.stdout
 
 
-def test_unimplemented_subcommand_exits_nonzero() -> None:
-    # `bench` is the remaining not-yet-implemented command (Phase 0 probed
-    # `status`, Phases 1–4 probed `search`; Phase 5 implemented search — see
-    # DECISIONS.md D5 precedent: the probe moves, the assertions never weaken).
+def test_unsupported_subcommand_exits_nonzero() -> None:
+    # Phase 0 probed `status`, Phases 1–4 probed `search`, Phase 5 implemented
+    # search and moved the probe to `bench`. `bench` is now implemented too
+    # (D49), so NO unimplemented subcommand remains and the probe moves once
+    # more — to an unknown subcommand, the nearest remaining "sherpa must
+    # refuse a command it cannot serve" case. Same assertions, same strength:
+    # exit code 2 and an explanatory stderr message, never a traceback.
+    # See DECISIONS.md D5/D29/D49 precedent: the probe moves, the assertions
+    # never weaken.
     result = subprocess.run(
-        [sys.executable, "-m", "codesherpa.cli", "bench"],
+        [sys.executable, "-m", "codesherpa.cli", "definitely-not-a-command"],
         capture_output=True,
         text=True,
     )
     assert result.returncode == 2
-    assert "not implemented" in result.stderr
+    assert "invalid choice" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
+def test_bench_help_documents_both_benchmarks() -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "codesherpa.cli", "bench", "--help"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0
+    for flag in ("--indexing", "--retrieval", "--synthetic", "--query-file"):
+        assert flag in result.stdout
+
+
+def test_bench_outside_repository_is_friendly(tmp_path) -> None:
+    """No traceback when there is no repo — consistent with search/gain."""
+    result = subprocess.run(
+        [sys.executable, "-m", "codesherpa.cli", "bench"],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+    )
+    assert result.returncode == 1
+    assert "Traceback" not in result.stderr
+    assert result.stderr.startswith("sherpa bench:")
 
 
 def test_serve_refuses_non_repository(tmp_path) -> None:

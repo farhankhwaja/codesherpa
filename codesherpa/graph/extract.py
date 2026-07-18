@@ -13,10 +13,12 @@ the same symbols and edges, in the same order.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from dataclasses import dataclass, field
 from functools import lru_cache
-from importlib import resources
+from importlib import metadata, resources
 from typing import Iterable, Optional
 
 from tree_sitter import Language, Parser, Query, QueryCursor
@@ -25,7 +27,18 @@ from tree_sitter_language_pack import get_language
 from codesherpa.contracts.types import Edge, EdgeKind, SymbolKind, SymbolNode
 from codesherpa.graph.languages import REGISTRY, LanguageSpec, language_for_path
 
-__all__ = ["SourceFile", "extract_project", "extract_file", "language_for_path"]
+__all__ = [
+    "SourceFile",
+    "CachedFile",
+    "extract_project",
+    "extract_project_cached",
+    "extract_file",
+    "language_for_path",
+    "encode_facts",
+    "decode_facts",
+    "extraction_tag",
+    "GRAPH_FACTS_VERSION",
+]
 
 _CONST_NAME_RE = re.compile(r"^_?[A-Z][A-Z0-9_]*$")
 _MAX_SIGNATURE_CHARS = 200
@@ -105,7 +118,19 @@ class _Site:
 
 @dataclass
 class _FileFacts:
-    source: SourceFile
+    """Pass-1 output for one file.
+
+    Everything below ``module`` is PATH-INDEPENDENT: it is a pure function of
+    (blob bytes, language). ``path``/``blob_hash``/``module`` are the
+    path-dependent trimmings, cheaply rebuilt when facts are restored from the
+    per-blob cache (:func:`encode_facts` / :func:`decode_facts`). Note there is
+    deliberately no reference to the file's bytes here — pass 2 must never need
+    them, or the cache could not skip reading the blob at all.
+    """
+
+    path: str
+    blob_hash: str
+    language: str
     spec: LanguageSpec
     module: SymbolNode
     defs: list[SymbolNode] = field(default_factory=list)
@@ -155,7 +180,13 @@ def _extract_file(source: SourceFile) -> _FileFacts:
         byte_end=len(source.data),
         file_path=source.path,
     )
-    facts = _FileFacts(source=source, spec=spec, module=module)
+    facts = _FileFacts(
+        path=source.path,
+        blob_hash=source.blob_hash,
+        language=source.language,
+        spec=spec,
+        module=module,
+    )
 
     # span -> (kind, name, name_offset); best kind wins on duplicate captures
     raw_defs: dict[tuple[int, int], tuple[SymbolKind, str, int]] = {}
@@ -279,20 +310,20 @@ class _Resolver:
     """Best-effort name resolution: same file -> package -> imports -> unique."""
 
     def __init__(self, all_facts: list[_FileFacts], project_paths: frozenset[str]):
-        self.modules: dict[str, SymbolNode] = {f.source.path: f.module for f in all_facts}
+        self.modules: dict[str, SymbolNode] = {f.path: f.module for f in all_facts}
         self.by_file: dict[str, dict[str, list[SymbolNode]]] = {}
         self.by_package: dict[tuple[str, str], list[SymbolNode]] = {}
         self.by_name: dict[str, list[SymbolNode]] = {}
         self.project_paths = project_paths
         self.family_by_path: dict[str, str] = {
-            f.source.path: _FAMILY[f.source.language] for f in all_facts
+            f.path: _FAMILY[f.language] for f in all_facts
         }
         self.by_receiver: dict[tuple[str, str, str], list[SymbolNode]] = {}
         """(family, receiver_type, method_name) -> method defs (Go)."""
         for facts in all_facts:
-            per_file = self.by_file.setdefault(facts.source.path, {})
-            package = facts.source.path.rpartition("/")[0]
-            family = _FAMILY[facts.source.language]
+            per_file = self.by_file.setdefault(facts.path, {})
+            package = facts.path.rpartition("/")[0]
+            family = _FAMILY[facts.language]
             for node in facts.defs:
                 per_file.setdefault(node.symbol, []).append(node)
                 self.by_package.setdefault((package, node.symbol), []).append(node)
@@ -327,7 +358,7 @@ class _Resolver:
     def resolve(
         self, name: str, facts: _FileFacts, bindings: dict[str, SymbolNode]
     ) -> Optional[SymbolNode]:
-        local = self.by_file.get(facts.source.path, {}).get(name)
+        local = self.by_file.get(facts.path, {}).get(name)
         if local:
             return self._best(local)
         if name in bindings:
@@ -336,14 +367,14 @@ class _Resolver:
                 return bound
         if name in _GENERIC_NAMES:
             return None  # too common to resolve without a same-file def or import
-        family = _FAMILY[facts.source.language]
-        package = facts.source.path.rpartition("/")[0]
+        family = _FAMILY[facts.language]
+        package = facts.path.rpartition("/")[0]
         in_package = self.by_package.get((package, name))
         if in_package:
             others = [
                 n
                 for n in in_package
-                if n.file_path != facts.source.path
+                if n.file_path != facts.path
                 and self.family_by_path.get(n.file_path) == family
             ]
             if others:
@@ -365,7 +396,7 @@ def _import_bindings(
     edges: list[Edge] = []
     for imp in facts.imports:
         target_path = facts.spec.resolve_import(
-            imp.module_text, facts.source.path, resolver.project_paths
+            imp.module_text, facts.path, resolver.project_paths
         )
         if target_path is None or target_path not in resolver.modules:
             continue
@@ -379,7 +410,7 @@ def _import_bindings(
                 joiner = "" if imp.module_text.endswith(".") else "."
                 sub_path = facts.spec.resolve_import(
                     f"{imp.module_text}{joiner}{imp.name}",
-                    facts.source.path,
+                    facts.path,
                     resolver.project_paths,
                 )
                 if sub_path is not None and sub_path in resolver.modules:
@@ -427,7 +458,18 @@ def extract_project(files: Iterable[SourceFile]) -> tuple[list[SymbolNode], list
     """
     sources = sorted(files, key=lambda f: f.path)
     all_facts = [_extract_file(f) for f in sources if f.language in REGISTRY]
-    project_paths = frozenset(f.path for f in sources)
+    return _resolve_project(all_facts, frozenset(f.path for f in sources))
+
+
+def _resolve_project(
+    all_facts: list[_FileFacts], project_paths: frozenset[str]
+) -> tuple[list[SymbolNode], list[Edge]]:
+    """Pass 2 — cross-file resolution over already-extracted per-file facts.
+
+    This is the part that can NEVER be cached per blob: adding one file can
+    change how another file's names resolve, so it must rerun over the full
+    active set on every sync (DECISIONS.md D19).
+    """
     resolver = _Resolver(all_facts, project_paths)
 
     symbols: list[SymbolNode] = []
@@ -460,7 +502,7 @@ def extract_project(files: Iterable[SourceFile]) -> tuple[list[SymbolNode], list
                 # name guessing (no interface-satisfaction resolution; see
                 # DECISIONS.md).
                 target = resolver.resolve_method(
-                    _FAMILY[facts.source.language], recv_type, site.name
+                    _FAMILY[facts.language], recv_type, site.name
                 )
             else:
                 target = resolver.resolve(site.name, facts, bindings)
@@ -474,6 +516,157 @@ def extract_project(files: Iterable[SourceFile]) -> tuple[list[SymbolNode], list
     symbols.sort(key=lambda n: (n.file_path, n.byte_start, n.symbol))
     edges = sorted(edge_set.values(), key=lambda e: (e.kind, e.src, e.dst))
     return symbols, edges
+
+
+# ------------------------------------------------- per-blob facts cache
+#
+# Pass-1 facts are a pure function of (blob bytes, language) — path-independent
+# — so they can be persisted per blob and replayed instead of reparsing the
+# whole active set every sync. Pass 2 still runs globally, which is what keeps
+# incremental == rebuild (the Golden Test).
+
+GRAPH_FACTS_VERSION = 1
+"""Version of the per-blob extraction payload (:func:`encode_facts`).
+
+BUMP THIS whenever pass 1 (`_extract_file`) changes what it collects or how it
+labels it — new capture kinds, changed def reclassification, changed signature
+truncation, a new payload field. Cached facts written by an older sherpa would
+otherwise be replayed as if current, and the resulting symbols/edges would be
+silently wrong (the Golden Test cannot catch this: it compares two runs of the
+SAME code). Query-file edits and grammar upgrades are covered automatically by
+:func:`extraction_tag` and do NOT need a bump.
+
+v1: initial versioned payload (D48).
+"""
+
+
+@lru_cache(maxsize=1)
+def _queries_digest() -> str:
+    """SHA-256 over every ``queries/*.scm``, so editing a query invalidates."""
+    digest = hashlib.sha256()
+    for spec_name in sorted(REGISTRY):
+        query_file = REGISTRY[spec_name].query_file
+        digest.update(query_file.encode("utf-8"))
+        digest.update(_query_source(query_file).encode("utf-8"))
+    return digest.hexdigest()[:16]
+
+
+@lru_cache(maxsize=1)
+def _grammar_versions() -> str:
+    parts = []
+    for dist in ("tree-sitter", "tree-sitter-language-pack"):
+        try:
+            parts.append(f"{dist}={metadata.version(dist)}")
+        except metadata.PackageNotFoundError:  # pragma: no cover - always installed
+            parts.append(f"{dist}=unknown")
+    return ",".join(parts)
+
+
+def extraction_tag() -> str:
+    """Identity of the extractor that produced a cached payload.
+
+    Mirrors ``retrieve.warm.embedding_tag``: cached rows are only reusable
+    while this string is unchanged. It folds in the manual payload version,
+    a digest of the tree-sitter query files, and the installed grammar
+    versions — so a query edit or a grammar upgrade invalidates the cache
+    without anyone remembering to bump a constant.
+    """
+    return f"v{GRAPH_FACTS_VERSION}|q={_queries_digest()}|{_grammar_versions()}"
+
+
+def encode_facts(source: SourceFile) -> str:
+    """Extract ``source`` and serialize its PATH-INDEPENDENT pass-1 facts.
+
+    The payload deliberately omits ``path``, ``blob_hash`` and the module node:
+    those are re-derived in :func:`decode_facts` from the path the blob is
+    reachable at, so one cached row serves a blob at any number of paths.
+    """
+    facts = _extract_file(source)
+    return json.dumps(
+        {
+            "size": facts.module.byte_end,
+            "defs": [
+                [d.symbol, d.kind.value, d.byte_start, d.byte_end, d.signature]
+                for d in facts.defs
+            ],
+            "imports": [[i.module_text, i.name, i.alias] for i in facts.imports],
+            "calls": [[c.name, c.offset, c.recv] for c in facts.calls],
+            "refs": [[r.name, r.offset] for r in facts.refs],
+            "local_types": list(facts.local_types.items()),
+            "method_receiver": list(facts.method_receiver.items()),
+        },
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+
+
+def decode_facts(payload: str, path: str, blob_hash: str, language: str) -> _FileFacts:
+    """Rebuild pass-1 facts from a cached payload for ``path``.
+
+    Must reproduce :func:`_extract_file` exactly, field for field — the Golden
+    Test compares an incremental index (cache hits) against a rebuild.
+    """
+    raw = json.loads(payload)
+    spec = REGISTRY[language]
+    facts = _FileFacts(
+        path=path,
+        blob_hash=blob_hash,
+        language=language,
+        spec=spec,
+        module=SymbolNode(
+            symbol=spec.module_name(path),
+            kind=SymbolKind.MODULE,
+            blob_hash=blob_hash,
+            byte_start=0,
+            byte_end=raw["size"],
+            file_path=path,
+        ),
+    )
+    facts.defs = [
+        SymbolNode(
+            symbol=symbol,
+            kind=SymbolKind(kind),
+            blob_hash=blob_hash,
+            byte_start=byte_start,
+            byte_end=byte_end,
+            file_path=path,
+            signature=signature,
+        )
+        for symbol, kind, byte_start, byte_end, signature in raw["defs"]
+    ]
+    facts.imports = [_Import(module, name, alias) for module, name, alias in raw["imports"]]
+    facts.calls = [_Site(name, offset, recv) for name, offset, recv in raw["calls"]]
+    facts.refs = [_Site(name, offset) for name, offset in raw["refs"]]
+    facts.local_types = {name: type_ for name, type_ in raw["local_types"]}
+    facts.method_receiver = {int(start): recv for start, recv in raw["method_receiver"]}
+    return facts
+
+
+@dataclass(frozen=True)
+class CachedFile:
+    """A project file whose pass-1 facts are already available as a payload."""
+
+    path: str
+    blob_hash: str
+    language: str
+    payload: str
+
+
+def extract_project_cached(
+    files: Iterable[CachedFile],
+) -> tuple[list[SymbolNode], list[Edge]]:
+    """:func:`extract_project` over cached payloads instead of raw bytes.
+
+    Guaranteed by construction and by test to return exactly what
+    ``extract_project`` returns for the same files.
+    """
+    entries = sorted(files, key=lambda f: f.path)
+    all_facts = [
+        decode_facts(f.payload, f.path, f.blob_hash, f.language)
+        for f in entries
+        if f.language in REGISTRY
+    ]
+    return _resolve_project(all_facts, frozenset(f.path for f in entries))
 
 
 def extract_file(source: SourceFile) -> list[SymbolNode]:

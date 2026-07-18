@@ -333,3 +333,58 @@ py3.12 venv. Verifier PASS (verification/phase-gain-report.md) incl. the
 privacy attack: planted secrets (paths, symbols, string constants) queried
 through a real MCP session; zero hits across every usage row/column, the
 sqlite dump, and the HTML report; memory standing attack 3.80 GiB < 6 GB.
+
+## Sync performance — per-blob graph cache (D48) + Go import fix (D50)
+
+Branch `feat/bench-and-graph-cache`. Machine: darwin arm64, 32 GB, CPU-only,
+Python 3.12. Corpus: a local clone of grafana; `sync()` called directly (no
+embedding pass) so the numbers isolate parse + graph + store.
+
+**Repo A — grafana `pkg/`, 7,032 files, 6,322 blobs, 29,225 chunks,
+53,200 symbols, 286,774 edges, 1,471,677 lines.**
+
+| build | cold sync | no-op re-sync | peak RSS |
+|---|---|---|---|
+| main (neither change) | 187.85 s | 164.93 s | 842 MB |
+| D48 + D50 | 20.17 s | 7.52 s | 865 MB |
+| speedup | **9.3x** | **21.9x** | — |
+
+**Repo B — 2,000-file subset of the same tree (isolating each change).**
+1,788 blobs, 18,935 symbols, 94,659 edges, 399,842 lines. Median of 3 no-op
+syncs, back-to-back on an otherwise idle machine.
+
+| build | cold sync | no-op re-sync | vs main |
+|---|---|---|---|
+| main | 33.13 s | 30.90 s | 1.00x |
+| + D48 (graph cache) only | 35.93 s | 29.50 s | 1.05x |
+| + D50 (Go import fix) only | 6.20 s | 4.65 s | 6.6x |
+| + both | 6.17 s | 1.90 s | **16.3x** |
+
+Read honestly: the graph cache on its own is worth ~5% here, because a
+quadratic import-resolution scan (D50) accounted for ~98% of sync time on Go
+code and hid it. Once that is removed the cache is worth 2.4x on a no-op sync
+(4.65 s -> 1.90 s) — that is the cache's real contribution, and it is the
+number to quote for it. The headline 21.9x is the two changes together.
+
+Cold sync with the cache alone is slightly SLOWER (33.13 -> 35.93 s): a cold
+index writes every payload and gets no reuse. That cost is paid once per blob,
+ever, and is the intended trade.
+
+Scale note: before D50, full grafana (22,062 tracked files, 15,088 in
+graph-supported languages) did not complete a single sync in this environment.
+Not re-measured after; repo A is the largest tree with a verified before/after
+pair.
+
+Gates re-run on this branch, thresholds unchanged:
+
+    mode      recall@5     MRR   p50 ms   p95 ms  misses
+    ------------------------------------------------------------
+    hybrid       0.974   0.869    166.1    175.2  q28
+    bm25         0.744   0.611      0.2      0.3  q26,q27,q28,q29,q30,q31,q32,q33,q34,q38
+    vector       0.795   0.714     19.2     28.4  q01,q04,q15,q19,q22,q28,q32,q38
+    hybrid recall by query type: decoy=1.00  nl=1.00  nl_hard=0.89  stacktrace=1.00  symbol=1.00
+    GATE: PASS
+
+Identical to main (0.974 / 0.869) — retrieval quality unchanged, as expected
+for a pure indexing-path change. Full suite 363 passed (was 351; +12 added,
+none removed). Golden Test green, including `GOLDEN_DEEP=1`.
