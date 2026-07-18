@@ -992,7 +992,15 @@ table is unchanged at 0.974 / 0.869 across both). Deliberately NOT addressed
 here: fixing it means touching the blend/rerank path, which is out of scope for
 a chunker change and would muddy this branch's attribution.
 
-## D47 — Per-blob graph extraction cache (feat/bench-and-graph-cache)
+> Renumbering note (2026-07-18): D48/D49/D50 below were originally written
+> as D47/D48/D49 on this branch, in parallel with `fix/partial-ast-salvage`
+> claiming D47/D47a for partial-AST salvage (earlier by commit time, so it
+> keeps the number). Commit messages on this branch (`f0db70f`, `3b36e64`,
+> `8566c51`, `a7d0d2b`) still say D47–D49; they are not rewritten because
+> that would break their GPG signatures. Map: cache=D48, bench=D49, Go
+> import fix=D50.
+
+## D48 — Per-blob graph extraction cache (feat/bench-and-graph-cache)
 
 Resolves the `TODO(upgrade)` that stood at the top of `graph/index.py`:
 `sync_graph()` re-parsed the FULL active set on every sync, so a repo with
@@ -1044,15 +1052,15 @@ each change in EVAL_LOG.md):
 | | cold sync | no-op re-sync |
 |---|---|---|
 | main | 187.85 s | 164.93 s |
-| + D47 + D49 | 20.17 s | 7.52 s |
+| + D48 + D50 | 20.17 s | 7.52 s |
 
 Honest isolation on a 2,000-file subset: the cache ALONE moved a no-op sync
-30.9 s -> 29.5 s (1.05x). Its real contribution only became visible after D49
+30.9 s -> 29.5 s (1.05x). Its real contribution only became visible after D50
 removed a quadratic import-resolution hot spot that dominated everything:
-with D49 in place the cache moves 4.65 s -> 1.90 s (2.4x). Reported this way
+with D50 in place the cache moves 4.65 s -> 1.90 s (2.4x). Reported this way
 rather than claiming the combined 21.9x for the cache alone.
 
-## D48 — `sherpa bench` becomes a real command (feat/bench-and-graph-cache)
+## D49 — `sherpa bench` becomes a real command (feat/bench-and-graph-cache)
 
 `bench` was the last advertised-but-unimplemented subcommand (a stub returning
 exit 2). It now measures two things on real data:
@@ -1086,9 +1094,9 @@ it cannot serve" case. Assertions are not weakened: still exit code 2, still an
 explanatory stderr message, plus a new assertion that no traceback is printed.
 Two tests were added for the new behavior. Suite: 351 -> 363, none removed.
 
-## D49 — Go import resolution was quadratic (feat/bench-and-graph-cache)
+## D50 — Go import resolution was quadratic (feat/bench-and-graph-cache)
 
-Found while measuring D47, not looked for. `_go_resolve_import` scanned EVERY
+Found while measuring D48, not looked for. `_go_resolve_import` scanned EVERY
 project path — calling `posixpath.dirname` on each — for every candidate tail
 of every import. On grafana's `pkg/` that was 113 MILLION `dirname` calls per
 sync, 98% of total sync wall-time, and it dwarfed the change I was trying to
@@ -1101,7 +1109,7 @@ project path set (`lru_cache(maxsize=4)` on the frozenset) and looking tails up
 in it. Semantically identical — the minimum is the same element the old
 `sorted(...)[0]` returned — so this is a pure optimization; the Golden Test and
 the Go extraction tests pin that. Measured: no-op sync on grafana `pkg/`
-164.93 s -> 7.52 s combined with D47; D49 alone accounts for 30.9 s -> 4.65 s
+164.93 s -> 7.52 s combined with D48; D50 alone accounts for 30.9 s -> 4.65 s
 on the 2,000-file subset (6.6x).
 
 Not generalized to the other languages: Python/TS/proto resolution is already

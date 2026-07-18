@@ -128,7 +128,7 @@ def _go_package_dirs(project_paths: frozenset[str]) -> dict[str, str]:
 
     Built once per project path set instead of rescanning every path for every
     import: the naive form was O(imports x paths) and dominated sync wall-time
-    on Go repos (D49). Same answer as the scan — the minimum is the same
+    on Go repos (D50). Same answer as the scan — the minimum is the same
     element ``sorted(...)[0]`` returned.
     """
     first: dict[str, str] = {}

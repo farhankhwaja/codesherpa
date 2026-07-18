@@ -11,7 +11,7 @@ holds by construction (DECISIONS.md D19).
 What IS cacheable is tree-sitter pass 1. Definitions, call/reference sites and
 imports are a pure function of (blob bytes, language) — path-independent — so
 they are persisted per blob in ``graph_facts`` and replayed on later syncs
-(D47). Only genuinely new blobs are read and parsed; the cross-file resolution
+(D48). Only genuinely new blobs are read and parsed; the cross-file resolution
 pass still runs over the full active set, which is what preserves correctness.
 The cache is invalidated wholesale when ``extraction_tag()`` changes (payload
 version, query-file edit, or grammar upgrade), mirroring ``embed_tag``.

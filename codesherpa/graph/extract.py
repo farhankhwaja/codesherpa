@@ -536,7 +536,7 @@ silently wrong (the Golden Test cannot catch this: it compares two runs of the
 SAME code). Query-file edits and grammar upgrades are covered automatically by
 :func:`extraction_tag` and do NOT need a bump.
 
-v1: initial versioned payload (D47).
+v1: initial versioned payload (D48).
 """
 
 

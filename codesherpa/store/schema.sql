@@ -89,7 +89,7 @@ CREATE TABLE IF NOT EXISTS edges (
 
 CREATE INDEX IF NOT EXISTS idx_edges_dst ON edges(dst);
 
--- Per-blob symbol-extraction cache (D47). Symbols and edges themselves are a
+-- Per-blob symbol-extraction cache (D48). Symbols and edges themselves are a
 -- GLOBAL function of the active file mapping and are still recomputed and
 -- REPLACED every sync (D19) — but tree-sitter pass 1 (definitions, call/ref
 -- sites, imports) is path-independent, so its output is cached per blob and

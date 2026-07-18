@@ -161,7 +161,7 @@ def _sync_locked(
     # Phase 4: symbols/edges are a pure function of the active mapping and are
     # recomputed + replaced every sync (sherpa/graph/index.py, DECISIONS
     # D19). Chunks/embeddings above stay incremental — that is the §4 insight.
-    # The per-blob extraction cache (D50) means this reads and parses only
+    # The per-blob extraction cache (D48) means this reads and parses only
     # blobs whose facts are not cached yet, so the reader is passed lazily
     # rather than prefetching every active blob's bytes.
     stats.symbols_indexed, stats.edges_indexed = sync_graph(

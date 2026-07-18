@@ -1,4 +1,4 @@
-"""Per-blob graph extraction cache (D47).
+"""Per-blob graph extraction cache (D48).
 
 The cache replays tree-sitter pass 1 from a persisted payload instead of
 reparsing. The whole risk is that a replayed payload differs in ANY way from a

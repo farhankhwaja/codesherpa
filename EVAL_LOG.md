@@ -334,7 +334,7 @@ privacy attack: planted secrets (paths, symbols, string constants) queried
 through a real MCP session; zero hits across every usage row/column, the
 sqlite dump, and the HTML report; memory standing attack 3.80 GiB < 6 GB.
 
-## Sync performance — per-blob graph cache (D47) + Go import fix (D49)
+## Sync performance — per-blob graph cache (D48) + Go import fix (D50)
 
 Branch `feat/bench-and-graph-cache`. Machine: darwin arm64, 32 GB, CPU-only,
 Python 3.12. Corpus: a local clone of grafana; `sync()` called directly (no
@@ -346,7 +346,7 @@ embedding pass) so the numbers isolate parse + graph + store.
 | build | cold sync | no-op re-sync | peak RSS |
 |---|---|---|---|
 | main (neither change) | 187.85 s | 164.93 s | 842 MB |
-| D47 + D49 | 20.17 s | 7.52 s | 865 MB |
+| D48 + D50 | 20.17 s | 7.52 s | 865 MB |
 | speedup | **9.3x** | **21.9x** | — |
 
 **Repo B — 2,000-file subset of the same tree (isolating each change).**
@@ -356,12 +356,12 @@ syncs, back-to-back on an otherwise idle machine.
 | build | cold sync | no-op re-sync | vs main |
 |---|---|---|---|
 | main | 33.13 s | 30.90 s | 1.00x |
-| + D47 (graph cache) only | 35.93 s | 29.50 s | 1.05x |
-| + D49 (Go import fix) only | 6.20 s | 4.65 s | 6.6x |
+| + D48 (graph cache) only | 35.93 s | 29.50 s | 1.05x |
+| + D50 (Go import fix) only | 6.20 s | 4.65 s | 6.6x |
 | + both | 6.17 s | 1.90 s | **16.3x** |
 
 Read honestly: the graph cache on its own is worth ~5% here, because a
-quadratic import-resolution scan (D49) accounted for ~98% of sync time on Go
+quadratic import-resolution scan (D50) accounted for ~98% of sync time on Go
 code and hid it. Once that is removed the cache is worth 2.4x on a no-op sync
 (4.65 s -> 1.90 s) — that is the cache's real contribution, and it is the
 number to quote for it. The headline 21.9x is the two changes together.
@@ -370,7 +370,7 @@ Cold sync with the cache alone is slightly SLOWER (33.13 -> 35.93 s): a cold
 index writes every payload and gets no reuse. That cost is paid once per blob,
 ever, and is the intended trade.
 
-Scale note: before D49, full grafana (22,062 tracked files, 15,088 in
+Scale note: before D50, full grafana (22,062 tracked files, 15,088 in
 graph-supported languages) did not complete a single sync in this environment.
 Not re-measured after; repo A is the largest tree with a verified before/after
 pair.

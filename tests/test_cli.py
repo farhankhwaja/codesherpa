@@ -33,11 +33,11 @@ def test_console_script_help_runs() -> None:
 def test_unsupported_subcommand_exits_nonzero() -> None:
     # Phase 0 probed `status`, Phases 1–4 probed `search`, Phase 5 implemented
     # search and moved the probe to `bench`. `bench` is now implemented too
-    # (D48), so NO unimplemented subcommand remains and the probe moves once
+    # (D49), so NO unimplemented subcommand remains and the probe moves once
     # more — to an unknown subcommand, the nearest remaining "sherpa must
     # refuse a command it cannot serve" case. Same assertions, same strength:
     # exit code 2 and an explanatory stderr message, never a traceback.
-    # See DECISIONS.md D5/D29/D48 precedent: the probe moves, the assertions
+    # See DECISIONS.md D5/D29/D49 precedent: the probe moves, the assertions
     # never weaken.
     result = subprocess.run(
         [sys.executable, "-m", "codesherpa.cli", "definitely-not-a-command"],

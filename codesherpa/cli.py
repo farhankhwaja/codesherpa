@@ -1,7 +1,7 @@
 """sherpa command-line interface.
 
 init/sync/status (Phase 1), serve (Phase 4), search (Phase 5), gain and bench
-(D48) are all live — every advertised subcommand does real work.
+(D49) are all live — every advertised subcommand does real work.
 """
 
 from __future__ import annotations
