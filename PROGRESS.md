@@ -7,6 +7,7 @@ whole-repo verifier PASS, verification/phase-6-report.md) + PR #1
 verification/phase-A-fix-report.md; merged 2026-07-05, CI green).
 Project naming: PyPI dist + package `codesherpa`, user-facing
 command/MCP/index `sherpa` (D37); CLAUDE.md updated to match.
+The `graph/index.py` TODO(upgrade) (per-blob extraction facts) is DONE — D47.
 Open (roadmap, not blocking): TODO(upgrade) — revalidate the large-regime
 blend weight + router ambiguity threshold on a public large repo
 (grafana/grafana protocol in D45: tuning + held-out gold split); PyPI
@@ -21,6 +22,11 @@ publish; A/B raw-token target re-measure on a large repo.
   D47a (owner decision): root-level ERROR relaxed from wholesale-fallback to
   just-another-tainted-extent — 654 → 842 declarations; byte-exactness
   re-verified on all 57 salvaged files incl. the 2.6 KB straddling ERROR spans.
+- feat/bench-and-graph-cache: per-blob graph extraction cache (D47, new
+  `graph_facts` table + `graph_facts_tag` invalidation), real `sherpa bench`
+  (D48, logic moved to `codesherpa/bench.py`; `tests/bench_indexing.py` is now
+  a thin wrapper), and a quadratic Go import-resolution fix found while
+  measuring (D49). grafana `pkg/` no-op sync 164.93 s → 7.52 s; suite 351→363
 - feature/gain: `sherpa gain` local usage analytics (usage table, dispatch
   wrapper, privacy invariants test-pinned, terminal + self-contained HTML,
   README methodology) — D46, this branch
@@ -81,3 +87,12 @@ roadmap as a large-repo re-measurement. BLOCKED.md deleted per charter.
   the session scratchpad (never commit sizly content); fixture streams
   committed under verification/ab/fixture*/.
 - GPG signing requires unsandboxed git commits.
+- Graph cache (D47): if you change what `extract._extract_file` collects, BUMP
+  `GRAPH_FACTS_VERSION` — the Golden Test compares two runs of the same code
+  and structurally CANNOT catch a stale payload written by an older sherpa.
+  `.scm` edits and grammar upgrades invalidate automatically via
+  `extraction_tag()`; pass-1 logic changes do not.
+- Sync perf on large repos is dominated by graph pass 2 (cross-file
+  resolution) + writing symbols/edges, not by parsing. Profile
+  `_resolve_project` before optimizing anything else; `sherpa bench` on the
+  repo gives the cold/no-op split directly.
