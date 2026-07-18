@@ -10,6 +10,7 @@ and vector-only") measures the channels through identical packing.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from codesherpa.contracts.retrieval_contract import Retriever
@@ -39,9 +40,15 @@ class SingleChannelRetriever(HybridRetriever):
     """
 
     def __init__(self, store, embedder, channel: str, *, config=None) -> None:
-        baseline = config or RetrievalConfig()
-        baseline.rerank_enabled = False
-        baseline.expansion_enabled = False
+        # COPY, never mutate: `config` belongs to the caller. Assigning to it
+        # in place disabled reranking/expansion for every retriever built from
+        # the same object afterwards — a silent measurement corruption rather
+        # than a loud failure (tests/test_evalfactory.py pins this).
+        baseline = replace(
+            config or RetrievalConfig(),
+            rerank_enabled=False,
+            expansion_enabled=False,
+        )
         super().__init__(store, embedder, config=baseline)
         if channel not in ("bm25", "vector"):
             raise ValueError(f"unknown channel {channel!r}")

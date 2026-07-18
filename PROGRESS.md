@@ -14,6 +14,11 @@ blend weight + router ambiguity threshold on a public large repo
 publish; A/B raw-token target re-measure on a large repo.
 
 ## Done (one line each, with commit hash)
+- fix/config-mutation: SingleChannelRetriever no longer mutates the caller's
+  RetrievalConfig (aliasing silently disabled rerank/expansion for later
+  retrievers sharing the config — corrupted two ad-hoc benchmark runs; the
+  shipped harness was never affected, gate byte-identical). dataclasses.replace
+  copy + 4 failing-first tests — acbd0ac
 - fix/partial-ast-salvage: cAST no longer discards a whole file on
   `root.has_error` — clean top-level declarations keep real chunks, only
   error-tainted extents line-window (D47). Measured on grafana pkg/services:
